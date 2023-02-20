@@ -8,14 +8,11 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    container:
-      image: analysiscenter1/ds-py3:latest
-
     steps:
     - uses: actions/checkout@v1
 
     - name: Update pylint
-      run: pip3 install -U pylint
+      run: pip3 install -U pylint==2.11.0
 
     - name: Check pylint
-      run: pylint -rn --rcfile pylintrc nbtools
+      run: pylint -rn --rcfile pylintrc segfast
