@@ -91,7 +91,7 @@ class MemmapLoader(SegyioLoader):
 
     # Headers
     def load_headers(self, headers, chunk_size=25_000, max_workers=4, pbar=False,
-                     reconstruct_tsf=True, **kwargs):
+                     reconstruct_tsf=True, sort_columns=True, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -138,7 +138,7 @@ class MemmapLoader(SegyioLoader):
         executor_class = ForPoolExecutor if max_workers == 1 else ProcessPoolExecutor
 
         # Iterate over chunks
-        buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
+        buffer = np.empty((self.n_traces, len(headers) + int(reconstruct_tsf)), dtype=np.int32)
 
         with Notifier(pbar, total=self.n_traces) as progress_bar:
             with executor_class(max_workers=max_workers) as executor:
@@ -146,7 +146,7 @@ class MemmapLoader(SegyioLoader):
                 def callback(future, start):
                     chunk_headers = future.result()
                     chunk_size = len(chunk_headers)
-                    buffer[start : start + chunk_size] = chunk_headers
+                    buffer[start : start + chunk_size, :len(headers)] = chunk_headers
                     progress_bar.update(chunk_size)
 
                 for start, chunk_size_ in zip(chunk_starts, chunk_sizes):
@@ -155,10 +155,17 @@ class MemmapLoader(SegyioLoader):
                                              dtype=mmap_trace_dtype, headers=headers,
                                              start=start, chunk_size=chunk_size_)
                     future.add_done_callback(partial(callback, start=start))
-        dataframe = pd.DataFrame(buffer, columns=headers)
 
+        # Make TSF and construct to pd.DataFrame
         if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
+            buffer[:, -1] = self.make_tsf_header()
+            headers.append('TRACE_SEQUENCE_FILE')
+
+        dataframe = pd.DataFrame(buffer, columns=headers)
+        if sort_columns:
+            headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
+            columns = np.array(headers)[np.argsort(headers_bytes)]
+            dataframe = dataframe[columns]
         return dataframe
 
     def load_header(self, header, chunk_size=25_000, max_workers=None, pbar=False, **kwargs):

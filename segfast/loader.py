@@ -14,6 +14,10 @@ open = File = Loader
 def _select_loader_class(engine):
     if isinstance(engine, type):
         return engine
-    if 'seg' in engine:
+
+    engine = engine.lower()
+    if engine == 'segyio':
         return SegyioLoader
-    return MemmapLoader
+    if engine == 'memmap':
+        return MemmapLoader
+    raise ValueError(f'Unknown engine type `{engine}`!')

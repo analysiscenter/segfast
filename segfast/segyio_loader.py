@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import segyio
+from .utils import Notifier
 
 
 
@@ -50,6 +51,8 @@ class SegyioLoader:
         # Store arguments
         self.path = path
         self.endian = endian
+        self.strict = strict
+        self.ignore_geometry = ignore_geometry
 
         # Open SEG-Y file
         self.file_handler = segyio.open(path, mode='r', endian=endian,
@@ -92,7 +95,7 @@ class SegyioLoader:
         """ Compute the byte location of a header. """
         return [getattr(segyio.TraceField, header) for header in headers]
 
-    def load_headers(self, headers, reconstruct_tsf=True, **kwargs):
+    def load_headers(self, headers, reconstruct_tsf=True, sort_columns=True, tracewise=True, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -104,19 +107,39 @@ class SegyioLoader:
             Names of headers to load.
         reconstruct_tsf : bool
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
+        tracewise : bool
+            Whether to iterate over the file in a trace-wise manner, instead of header-wise.
+        pbar : bool, str
+            If bool, then whether to display progress bar over the file sweep.
+            If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
         """
         _ = kwargs
         if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
             headers = list(headers)
             headers.remove('TRACE_SEQUENCE_FILE')
 
-        dataframe = {}
-        for header in headers:
-            dataframe[header] = self.load_header(header)
-        if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
+        headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
 
-        dataframe = pd.DataFrame(dataframe)
+        # Load data to buffer
+        buffer = np.empty((self.n_traces, len(headers) + int(reconstruct_tsf)), dtype=np.int32)
+        if tracewise:
+            for i, header_ in Notifier(pbar, total=self.n_traces, frequency=1000)(enumerate(self.file_handler.header)):
+                for j, byte_ in enumerate(headers_bytes):
+                    buffer[i, j] = header_.getfield(header_.buf, byte_)
+        else:
+            for i, header in enumerate(headers):
+                buffer[:, i] = self.load_header(header)
+
+        # Make TSF and construct to pd.DataFrame
+        if reconstruct_tsf:
+            buffer[:, -1] = self.make_tsf_header()
+            headers.append('TRACE_SEQUENCE_FILE')
+
+        dataframe = pd.DataFrame(buffer, columns=headers)
+        if sort_columns:
+            headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
+            columns = np.array(headers)[np.argsort(headers_bytes)]
+            dataframe = dataframe[columns]
         return dataframe
 
     def load_header(self, header):
@@ -158,7 +181,9 @@ class SegyioLoader:
         """ Convert given `limits` to a `slice`. """
         if limits is None:
             return slice(0, self.n_samples, 1)
-        if isinstance(limits, (tuple, list)):
+        if isinstance(limits, int):
+            limits = slice(limits)
+        elif isinstance(limits, (tuple, list)):
             limits = slice(*limits)
 
         # Use .indices to avoid negative slicing range
@@ -287,11 +312,16 @@ class SegyioLoader:
         """Recreate a survey from unpickled state, reopen its source SEG-Y file and reconstruct a memory map over
         traces data."""
         self.__dict__ = state
-        self.file_handler = segyio.open(self.path, mode='r', endian=self.endian, strict=False, ignore_geometry=True)
+        self.file_handler = segyio.open(self.path, mode='r', endian=self.endian,
+                                        strict=self.strict, ignore_geometry=self.ignore_geometry)
         self.file_handler.mmap()
 
         if hasattr(self, '_construct_data_mmap'):
             self.data_mmap = self._construct_data_mmap()
+
+    def __del__(self):
+        """ Close SEG-Y file handler on loader destruction. """
+        self.file_handler.close()
 
 
 class SafeSegyioLoader(SegyioLoader):
