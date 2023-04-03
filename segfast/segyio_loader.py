@@ -87,7 +87,7 @@ class SegyioLoader:
                              "either both `Interval` (bytes 3217-3218 in the binary header) "
                              "and `TRACE_SAMPLE_INTERVAL` (bytes 117-118 in the header of the first trace) "
                              "are undefined or they have different values.")
-        return union_sample_interval.pop() / 1000  # convert from seconds to milliseconds
+        return union_sample_interval.pop() / 1000  # convert from microseconds to milliseconds
 
 
     # Headers
@@ -95,11 +95,21 @@ class SegyioLoader:
         """ Compute the byte location of a header. """
         return [getattr(segyio.TraceField, header) for header in headers]
 
+    def postprocess_headers_dataframe(self, dataframe, headers, reconstruct_tsf=True, sort_columns=True):
+        """ Optionally add TSF header and sort columns of a headers dataframe. """
+        if reconstruct_tsf:
+            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
+            headers.append('TRACE_SEQUENCE_FILE')
+
+        if sort_columns:
+            headers_bytes = self.headers_to_bytes(headers)
+            columns = np.array(headers)[np.argsort(headers_bytes)]
+            dataframe = dataframe[columns]
+        return dataframe
+
     def load_headers(self, headers, reconstruct_tsf=True, sort_columns=True, tracewise=True, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
-
-        Each header is loaded separately, requiring repeated reads from the file.
 
         Parameters
         ----------
@@ -107,6 +117,8 @@ class SegyioLoader:
             Names of headers to load.
         reconstruct_tsf : bool
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
+        sort_columns : bool
+            Whether to sort columns in the resulting dataframe by their starting bytes.
         tracewise : bool
             Whether to iterate over the file in a trace-wise manner, instead of header-wise.
         pbar : bool, str
@@ -118,7 +130,7 @@ class SegyioLoader:
             headers = list(headers)
             headers.remove('TRACE_SEQUENCE_FILE')
 
-        headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
+        headers_bytes = self.headers_to_bytes(headers)
 
         # Load data to buffer
         buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
@@ -132,14 +144,8 @@ class SegyioLoader:
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, columns=headers)
-        if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-            headers.append('TRACE_SEQUENCE_FILE')
-
-        if sort_columns:
-            headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
-            columns = np.array(headers)[np.argsort(headers_bytes)]
-            dataframe = dataframe[columns]
+        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
+                                                       reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
     def load_header(self, header):
@@ -153,7 +159,7 @@ class SegyioLoader:
 
 
     # Data loading: traces
-    def load_traces(self, indices, limits=None, buffer=None):
+    def load_traces(self, indices, limits=None, buffer=None, return_samples=False):
         """ Load traces by their indices.
         By pre-allocating memory for all of the requested traces, we significantly speed up the process.
 
@@ -165,6 +171,8 @@ class SegyioLoader:
             Slice of the data along the depth axis.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+        return_samples : bool
+            Whether to return samples of loaded traces in accordance to `limits`.
         """
         limits = self.process_limits(limits)
         samples = self.samples[limits]
@@ -175,7 +183,7 @@ class SegyioLoader:
 
         for i, index in enumerate(indices):
             self.load_trace(index=index, buffer=buffer[i], limits=limits)
-        return buffer
+        return buffer if return_samples is False else (buffer, samples)
 
     def process_limits(self, limits):
         """ Convert given `limits` to a `slice`. """
@@ -299,25 +307,17 @@ class SegyioLoader:
         self.file_handler.close()
 
     def __getstate__(self):
-        """Create pickling state from `__dict__` by setting SEG-Y file handler and memory mapped trace
-        data to `None`."""
+        """ Create pickling state from `__dict__` by setting SEG-Y file handler to `None`. """
         state = copy(self.__dict__)
         state["file_handler"] = None
-
-        if hasattr(self, 'data_mmap'):
-            state["data_mmap"] = None
         return state
 
     def __setstate__(self, state):
-        """Recreate a survey from unpickled state, reopen its source SEG-Y file and reconstruct a memory map over
-        traces data."""
+        """ Recreate instance from unpickled state and reopen source SEG-Y file. """
         self.__dict__ = state
         self.file_handler = segyio.open(self.path, mode='r', endian=self.endian,
                                         strict=self.strict, ignore_geometry=self.ignore_geometry)
         self.file_handler.mmap()
-
-        if hasattr(self, '_construct_data_mmap'):
-            self.data_mmap = self._construct_data_mmap()
 
     def __del__(self):
         """ Close SEG-Y file handler on loader destruction. """

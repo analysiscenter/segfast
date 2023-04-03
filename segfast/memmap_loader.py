@@ -72,8 +72,7 @@ class MemmapLoader(SegyioLoader):
 
         # Dtype for data of each trace
         mmap_trace_data_dtype = self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[self.file_format]
-        if isinstance(mmap_trace_data_dtype, str):
-            mmap_trace_data_dtype = self.endian_symbol + mmap_trace_data_dtype
+        mmap_trace_data_dtype = self.endian_symbol + mmap_trace_data_dtype
         self.mmap_trace_data_dtype = mmap_trace_data_dtype
         self.mmap_trace_data_size = self.n_samples if self.file_format != 1 else (self.n_samples, 4)
 
@@ -158,14 +157,8 @@ class MemmapLoader(SegyioLoader):
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, columns=headers)
-        if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-            headers.append('TRACE_SEQUENCE_FILE')
-
-        if sort_columns:
-            headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
-            columns = np.array(headers)[np.argsort(headers_bytes)]
-            dataframe = dataframe[columns]
+        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
+                                                       reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
     def load_header(self, header, chunk_size=25_000, max_workers=None, pbar=False, **kwargs):
@@ -227,8 +220,9 @@ class MemmapLoader(SegyioLoader):
             dtype_list.append(unused_dtype)
         return dtype_list
 
+
     # Data loading
-    def load_traces(self, indices, limits=None, buffer=None):
+    def load_traces(self, indices, limits=None, buffer=None, return_samples=False):
         """ Load traces by their indices.
         Under the hood, we use a pre-made memory mapping over the file, where trace data is viewed with a special dtype.
         Regardless of the numerical dtype of SEG-Y file, we output IEEE float32:
@@ -242,6 +236,8 @@ class MemmapLoader(SegyioLoader):
             Slice of the data along the depth axis.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+        return_samples : bool
+            Whether to return samples of loaded traces in accordance to `limits`.
         """
         limits = self.process_limits(limits)
 
@@ -254,9 +250,11 @@ class MemmapLoader(SegyioLoader):
             traces = self._ibm_to_ieee(traces)
 
         if buffer is None:
-            return np.require(traces, dtype=self.dtype, requirements='C')
+            buffer = np.require(traces, dtype=self.dtype, requirements='C')
+            return buffer if return_samples is False else (buffer, self.samples[limits])
+
         buffer[:len(indices)] = traces
-        return buffer
+        return buffer if return_samples is False else (buffer, self.samples[limits])
 
     def load_depth_slices(self, indices, buffer=None):
         """ Load horizontal (depth) slices of the data.
@@ -285,6 +283,19 @@ class MemmapLoader(SegyioLoader):
         if self.endian in {"little", "lsb"}:
             array_bytes = array_bytes[::-1]
         return ibm_to_ieee(*array_bytes)
+
+
+    # Inner workingss
+    def __getstate__(self):
+        """ Create pickling state from `__dict__` by setting SEG-Y file handler and memmap to `None`. """
+        state = super().__getstate__()
+        state["data_mmap"] = None
+        return state
+
+    def __setstate__(self, state):
+        """ Recreate instance from unpickled state, reopen source SEG-Y file and memmap. """
+        super().__setstate__(state)
+        self.data_mmap = self._construct_data_mmap()
 
 
     # Conversion to other SEG-Y formats (data dtype)
