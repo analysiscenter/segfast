@@ -138,7 +138,7 @@ class MemmapLoader(SegyioLoader):
         executor_class = ForPoolExecutor if max_workers == 1 else ProcessPoolExecutor
 
         # Iterate over chunks
-        buffer = np.empty((self.n_traces, len(headers) + int(reconstruct_tsf)), dtype=np.int32)
+        buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
 
         with Notifier(pbar, total=self.n_traces) as progress_bar:
             with executor_class(max_workers=max_workers) as executor:
@@ -146,7 +146,7 @@ class MemmapLoader(SegyioLoader):
                 def callback(future, start):
                     chunk_headers = future.result()
                     chunk_size = len(chunk_headers)
-                    buffer[start : start + chunk_size, :len(headers)] = chunk_headers
+                    buffer[start : start + chunk_size] = chunk_headers
                     progress_bar.update(chunk_size)
 
                 for start, chunk_size_ in zip(chunk_starts, chunk_sizes):
@@ -156,12 +156,12 @@ class MemmapLoader(SegyioLoader):
                                              start=start, chunk_size=chunk_size_)
                     future.add_done_callback(partial(callback, start=start))
 
-        # Make TSF and construct to pd.DataFrame
+        # Convert to pd.DataFrame, optionally add TSF and sort
+        dataframe = pd.DataFrame(buffer, columns=headers)
         if reconstruct_tsf:
-            buffer[:, -1] = self.make_tsf_header()
+            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
             headers.append('TRACE_SEQUENCE_FILE')
 
-        dataframe = pd.DataFrame(buffer, columns=headers)
         if sort_columns:
             headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
             columns = np.array(headers)[np.argsort(headers_bytes)]
@@ -255,7 +255,7 @@ class MemmapLoader(SegyioLoader):
 
         if buffer is None:
             return np.require(traces, dtype=self.dtype, requirements='C')
-        buffer[:] = traces
+        buffer[:len(indices)] = traces
         return buffer
 
     def load_depth_slices(self, indices, buffer=None):

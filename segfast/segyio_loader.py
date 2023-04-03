@@ -121,7 +121,7 @@ class SegyioLoader:
         headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
 
         # Load data to buffer
-        buffer = np.empty((self.n_traces, len(headers) + int(reconstruct_tsf)), dtype=np.int32)
+        buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
         if tracewise:
             for i, header_ in Notifier(pbar, total=self.n_traces, frequency=1000)(enumerate(self.file_handler.header)):
                 for j, byte_ in enumerate(headers_bytes):
@@ -130,12 +130,12 @@ class SegyioLoader:
             for i, header in enumerate(headers):
                 buffer[:, i] = self.load_header(header)
 
-        # Make TSF and construct to pd.DataFrame
+        # Convert to pd.DataFrame, optionally add TSF and sort
+        dataframe = pd.DataFrame(buffer, columns=headers)
         if reconstruct_tsf:
-            buffer[:, -1] = self.make_tsf_header()
+            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
             headers.append('TRACE_SEQUENCE_FILE')
 
-        dataframe = pd.DataFrame(buffer, columns=headers)
         if sort_columns:
             headers_bytes = [getattr(segyio.TraceField, header) for header in headers]
             columns = np.array(headers)[np.argsort(headers_bytes)]
