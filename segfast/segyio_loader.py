@@ -126,8 +126,9 @@ class SegyioLoader:
             If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
         """
         _ = kwargs
+        headers = list(headers)
+
         if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
-            headers = list(headers)
             headers.remove('TRACE_SEQUENCE_FILE')
 
         headers_bytes = self.headers_to_bytes(headers)
@@ -143,7 +144,7 @@ class SegyioLoader:
                 buffer[:, i] = self.load_header(header)
 
         # Convert to pd.DataFrame, optionally add TSF and sort
-        dataframe = pd.DataFrame(buffer, columns=headers)
+        dataframe = pd.DataFrame(buffer, columns=headers, copy=False)
         dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
