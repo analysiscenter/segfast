@@ -1,0 +1,31 @@
+[MASTER]
+ignore=batchflow
+extension-pkg-whitelist=numpy
+init-hook='import sys; sys.path.append(".")'
+
+[FORMAT]
+max-line-length=120
+max-parents=20
+max-attributes=100
+max-args=25
+max-locals=25
+max-branches=20
+max-statements=100
+variable-rgx=(.*[a-z][a-z0-9_]{1,30}|[a-z_])$ # snake_case + single letters
+argument-rgx=(.*[a-z][a-z0-9_]{1,30}|[a-z_])$ # snake_case + single letters
+
+[MESSAGE CONTROL]
+disable=no-value-for-parameter, no-self-use, too-few-public-methods, unsubscriptable-object, no-member, too-many-lines,
+        arguments-differ, too-many-locals, import-error, cyclic-import, duplicate-code, relative-beyond-top-level,
+        unused-argument, too-many-public-methods, invalid-name, attribute-defined-outside-init, arguments-renamed,
+        abstract-method, no-name-in-module, import-self
+
+[TYPECHECK]
+ignored-modules=numpy, numba
+
+[BASIC]
+class-rgx=[A-Z_][a-zA-Z0-9_]+$
+good-names=bar,df,fn
+
+[MISCELLANEOUS]
+notes=
