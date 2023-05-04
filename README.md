@@ -40,7 +40,7 @@ Timings for reading data along various projections:
 | seismiqb+HDF5                  |   1.04213  |   1.93414  |    1.80567 |  81.3581                      |  2616.83                        |
 | segfast <br/>quantized         |   0.252452 |   0.518485 |   56.6672  |   7.71151                     |  1212.74                        |
 
-<!-- ![SlideBenchmarks](https://user-images.githubusercontent.com/26159964/196654661-3ff89a60-c17e-47a5-862f-7f6b814a0df9.png) -->
+![SlideBenchmarks](https://raw.githubusercontent.com/analysiscenter/segfast/main/examples/article_timings_slides.png)
 
 
 ## Getting started
@@ -49,17 +49,17 @@ After installation just import **seismiQB** into your code. A quick demo of our 
 ```python
 import segfast
 
-segfast_file = segfast.open('/path/to/cube.sgy', engine='memmap')     # open file and read some meta info
-                                                                      # engine can be `segyio` or `memmap`
+segfast_file = segfast.open('/path/to/cube.sgy', engine='memmap')    # open file and read some meta info
+                                                                     # engine can be `segyio` or `memmap`
 
-segfast_file.load_headers(['INLINE_3D', 'CROSSLINE_3D', ...])         # load requested headers as dataframe
+segfast_file.load_headers(['INLINE_3D', 'CROSSLINE_3D', ...])        # load requested headers as dataframe
 
 # Data access. All methods support optional buffer as target memory
-segfast_file.load_traces([123, 333, 777], buffer=None)                # load traces by their indices
-segfast_file.load_depth_slices([111, 222, 1111], buffer=None)         # load depth slices by their indices
+segfast_file.load_traces([123, 333, 777], buffer=None)               # load traces by their indices
+segfast_file.load_depth_slices([111, 222, 1111], buffer=None)        # load depth slices by their indices
 
-segfast_file.convert(format=5)                                        # convert data format to IEEE float32
-                                                                      # speeds up operations by a lot
+segfast_file.convert(format=5)                                       # convert data format to IEEE float32
+                                                                     # speeds up operations by a lot
 
 ```
 You can get more familiar with the library, its functional and timings by reading [examples](examples).
