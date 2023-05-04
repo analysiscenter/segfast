@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/github/license/analysiscenter/batchflow.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Python](https://img.shields.io/badge/python-3.8-blue.svg)](https://python.org)
-[![Status](https://github.com/analysiscenter/segfast/actions/workflows/status.yml/badge.svg?branch=master&event=push)](https://github.com/analysiscenter/segfast/actions/workflows/status.yml)
+[![Status](https://github.com/analysiscenter/segfast/actions/workflows/status.yml/badge.svg?branch=main&event=push)](https://github.com/analysiscenter/segfast/actions/workflows/status.yml)
 
 </div>
 
@@ -49,17 +49,18 @@ After installation just import **seismiQB** into your code. A quick demo of our 
 ```python
 import segfast
 
-segfast_file = segfast.open('/path/to/cube.sgy', engine='memmap')    # open file and read some meta info
-                                                                     # engine can be `segyio` or `memmap`
+# Open file and read some meta info. Engine can be `segyio` or `memmap`
+segfast_file = segfast.open('/path/to/cube.sgy', engine='memmap')
 
-segfast_file.load_headers(['INLINE_3D', 'CROSSLINE_3D', ...])        # load requested headers as dataframe
+# Load requested headers as dataframe
+segfast_file.load_headers(['INLINE_3D', 'CROSSLINE_3D', ...])
 
 # Data access. All methods support optional buffer as target memory
-segfast_file.load_traces([123, 333, 777], buffer=None)               # load traces by their indices
-segfast_file.load_depth_slices([111, 222, 1111], buffer=None)        # load depth slices by their indices
+segfast_file.load_traces([123, 333, 777], buffer=None)
+segfast_file.load_depth_slices([5, 10, 15], buffer=None)
 
-segfast_file.convert(format=5)                                       # convert data format to IEEE float32
-                                                                     # speeds up operations by a lot
+# Convert data format to IEEE float32: speeds up operations by a lot
+segfast_file.convert(format=5)
 
 ```
 You can get more familiar with the library, its functional and timings by reading [examples](examples).
