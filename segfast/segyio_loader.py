@@ -64,19 +64,13 @@ class SegyioLoader:
         self.n_traces = self.file_handler.trace.length
         self.dtype = self.file_handler.dtype
 
-        # Sample interval, rate and delay
-        self.sample_interval = self._infer_sample_interval() # ms
-        self.sample_rate = 1000 / self.sample_interval       # Hz
-        self.samples = np.arange(self.n_samples) * self.sample_interval
-        self.delay = self.file_handler.header[0].get(segyio.TraceField.DelayRecordingTime)
-
         # Misc
         self.metrics = self.file_handler.xfd.metrics()
         self.text = [self.file_handler.text[i] for i in range(1 + self.file_handler.ext_headers)]
 
-
-    def _infer_sample_interval(self):
-        """ Get sample interval from file headers. """
+    @property
+    def sample_interval(self):
+        """ Sample interval of seismic traces. """
         bin_sample_interval = self.file_handler.bin[segyio.BinField.Interval]
         trace_sample_interval = self.file_handler.header[0][segyio.TraceField.TRACE_SAMPLE_INTERVAL]
         # 0 means undefined sample interval, so it is removed from the set
@@ -87,7 +81,12 @@ class SegyioLoader:
                              "either both `Interval` (bytes 3217-3218 in the binary header) "
                              "and `TRACE_SAMPLE_INTERVAL` (bytes 117-118 in the header of the first trace) "
                              "are undefined or they have different values.")
-        return union_sample_interval.pop() / 1000  # convert from microseconds to milliseconds
+        return union_sample_interval.pop()
+
+    @property
+    def delay(self):
+        """ Delay recording time of seismic traces. """
+        return self.file_handler.header[0].get(segyio.TraceField.DelayRecordingTime)
 
 
     # Headers
@@ -160,7 +159,7 @@ class SegyioLoader:
 
 
     # Data loading: traces
-    def load_traces(self, indices, limits=None, buffer=None, return_samples=False):
+    def load_traces(self, indices, limits=None, buffer=None):
         """ Load traces by their indices.
         By pre-allocating memory for all of the requested traces, we significantly speed up the process.
 
@@ -172,19 +171,16 @@ class SegyioLoader:
             Slice of the data along the depth axis.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
-        return_samples : bool
-            Whether to return samples of loaded traces in accordance to `limits`.
         """
         limits = self.process_limits(limits)
-        samples = self.samples[limits]
-        n_samples = len(samples)
+        n_samples = len(range(*limits.indices(self.n_samples)))
 
         if buffer is None:
             buffer = np.empty((len(indices), n_samples), dtype=self.dtype)
 
         for i, index in enumerate(indices):
             self.load_trace(index=index, buffer=buffer[i], limits=limits)
-        return buffer if return_samples is False else (buffer, samples)
+        return buffer
 
     def process_limits(self, limits):
         """ Convert given `limits` to a `slice`. """
@@ -208,6 +204,7 @@ class SegyioLoader:
         self.file_handler.xfd.gettr(buffer, index, 1, 1,
                                     limits.start, limits.stop, limits.step,
                                     buffer.size)
+
 
     # Data loading: depth slices
     def load_depth_slices(self, indices, buffer=None):

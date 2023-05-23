@@ -223,7 +223,7 @@ class MemmapLoader(SegyioLoader):
 
 
     # Data loading
-    def load_traces(self, indices, limits=None, buffer=None, return_samples=False):
+    def load_traces(self, indices, limits=None, buffer=None):
         """ Load traces by their indices.
         Under the hood, we use a pre-made memory mapping over the file, where trace data is viewed with a special dtype.
         Regardless of the numerical dtype of SEG-Y file, we output IEEE float32:
@@ -237,8 +237,6 @@ class MemmapLoader(SegyioLoader):
             Slice of the data along the depth axis.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
-        return_samples : bool
-            Whether to return samples of loaded traces in accordance to `limits`.
         """
         limits = self.process_limits(limits)
 
@@ -251,11 +249,10 @@ class MemmapLoader(SegyioLoader):
             traces = self._ibm_to_ieee(traces)
 
         if buffer is None:
-            buffer = np.require(traces, dtype=self.dtype, requirements='C')
-            return buffer if return_samples is False else (buffer, self.samples[limits])
+            return np.require(traces, dtype=self.dtype, requirements='C')
 
         buffer[:len(indices)] = traces
-        return buffer if return_samples is False else (buffer, self.samples[limits])
+        return buffer
 
     def load_depth_slices(self, indices, buffer=None):
         """ Load horizontal (depth) slices of the data.
