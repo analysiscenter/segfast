@@ -45,7 +45,7 @@ Timings for reading data along various projections:
 
 ## Getting started
 
-After installation just import **seismiQB** into your code. A quick demo of our primitives and methods:
+After installation just import **segfast** into your code. A quick demo of our primitives and methods:
 ```python
 import segfast
 
