@@ -1,6 +1,8 @@
 """ !!. """
 from functools import partial
 from concurrent.futures import Future, Executor
+import warnings
+import segyio
 
 
 try:
@@ -33,6 +35,43 @@ except ImportError:
                 """ Do nothing on update. """
                 _ = n
 notifier = Notifier
+
+
+class TraceHeader:
+    """ Trace header class to store its name and byte position. By default, byte position is defined by name
+    accordingly to SEG-Y specification.
+
+    Parameters
+    ----------
+    name : str or int
+        If str, name of the header. If int, is interpreted as 'byte' and name will be default from spec.
+    byte : int, optional
+        Byte position of the header, by default None. If None, default byte position from the spec will be used.
+    """
+    def __init__(self, name, byte=None):
+        standard_byte_to_header = {v: k for k, v in segyio.tracefield.keys.items()}
+
+        if isinstance(name, int):
+            if byte is not None:
+                raise ValueError("'name' is int and 'byte' is defined")
+            name = standard_byte_to_header[name]
+
+        if name not in segyio.tracefield.keys:
+            warnings.warn(f'{name} is not a standard header name')
+
+        self.name = name
+        self.byte = byte or segyio.tracefield.keys[name]
+        self.standard_name = standard_byte_to_header[self.byte]
+
+    def __eq__(self, other):
+        """ !!. """
+        if isinstance(other, str):
+            return self.name == other
+
+        for attr in self.__dict__:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
 
 
 

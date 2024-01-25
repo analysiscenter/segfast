@@ -102,8 +102,9 @@ class MemmapLoader(SegyioLoader):
 
         Parameters
         ----------
-        headers : sequence
-            Names of headers to load.
+        headers : sequence or dict
+            If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions. Byte
+            position can be None, than default value from SEG-Y specification will be used.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
@@ -115,7 +116,7 @@ class MemmapLoader(SegyioLoader):
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
         """
         _ = kwargs
-        headers = list(headers)
+        headers = self.make_headers(headers)
 
         if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
             headers.remove('TRACE_SEQUENCE_FILE')
@@ -157,7 +158,7 @@ class MemmapLoader(SegyioLoader):
                     future.add_done_callback(partial(callback, start=start))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
-        dataframe = pd.DataFrame(buffer, columns=headers, copy=False)
+        dataframe = pd.DataFrame(buffer, columns=[header.name for header in headers], copy=False)
         dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
@@ -188,11 +189,12 @@ class MemmapLoader(SegyioLoader):
         >>>  ('unused_1', numpy.void, 44)]
         """
         header_to_byte = segyio.tracefield.keys
-        byte_to_header = {val: key for key, val in header_to_byte.items()}
+        byte_to_header = {header.byte: header.name for header in headers}
+
         start_bytes = sorted(header_to_byte.values())
         byte_to_len = {start: end - start
                        for start, end in zip(start_bytes, start_bytes[1:] + [MemmapLoader.TRACE_HEADER_SIZE + 1])}
-        requested_headers_bytes = {header_to_byte[header] for header in headers}
+        requested_headers_bytes = {header.byte for header in headers}
 
         # Iterate over all headers
         # Unrequested headers are lumped into `np.void` of certain lengths
@@ -403,7 +405,7 @@ def read_chunk(path, shape, offset, dtype, headers, start, chunk_size):
 
     buffer = np.empty((chunk_size, len(headers)), dtype=np.int32)
     for i, header in enumerate(headers):
-        buffer[:, i] = mmap[header][start : start + chunk_size]
+        buffer[:, i] = mmap[header.name][start : start + chunk_size]
     return buffer
 
 
