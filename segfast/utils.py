@@ -1,6 +1,8 @@
 """ !!. """
 from functools import partial
 from concurrent.futures import Future, Executor
+import segyio
+import warnings
 
 
 try:
@@ -8,11 +10,26 @@ try:
 except ImportError:
     try:
         from tqdm.auto import tqdm
-        def Notifier(pbar, *args, **kwargs):
-            """ Progress bar. """
-            if pbar:
-                return tqdm(*args, **kwargs)
-            return lambda iterator: iterator
+
+        class Notifier:
+            """ tqdm notifier. """
+            def __init__(self, pbar, total, *args, **kwargs):
+                self.pbar = pbar
+                self.total = total
+                self.args = args
+                self.kwargs = kwargs
+
+            def __call__(self, iterator, *args, **kwargs):
+                _ = args, kwargs
+                return tqdm(iterator, total=self.total, disable=not self.pbar)
+
+            def __enter__(self):
+                """ !!. """
+                return tqdm(*self.args, total=self.total,**self.kwargs, disable=not self.pbar)
+
+            def __exit__(self, _, __, ___):
+                pass
+
     except ImportError:
         class Notifier:
             """ Dummy notifier. """
