@@ -68,10 +68,7 @@ class TraceHeader:
         if isinstance(other, str):
             return self.name == other
 
-        for attr in self.__dict__:
-            if getattr(self, attr) != getattr(other, attr):
-                return False
-        return True
+        return self.__dict__ == other.__dict__
 
 
 
