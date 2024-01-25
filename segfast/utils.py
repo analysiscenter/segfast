@@ -1,8 +1,6 @@
 """ !!. """
 from functools import partial
 from concurrent.futures import Future, Executor
-import segyio
-import warnings
 
 
 try:
