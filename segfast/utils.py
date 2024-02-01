@@ -47,9 +47,16 @@ class TraceHeader:
         If str, name of the header. If int, is interpreted as 'byte' and name will be default from spec.
     byte : int, optional
         Byte position of the header, by default None. If None, default byte position from the spec will be used.
+    dtype : int ot str, optional
+        dtype for header (e.g. 'i2', 'f4') or its length in bytes (then is interpreted as integer type).
     """
-    def __init__(self, name, byte=None):
+    TRACE_HEADER_SIZE = 240
+
+    def __init__(self, name, byte=None, dtype=None):
         standard_byte_to_header = {v: k for k, v in segyio.tracefield.keys.items()}
+        start_bytes = sorted(segyio.tracefield.keys.values())
+        standard_byte_to_len = {start: end - start
+                                for start, end in zip(start_bytes, start_bytes[1:] + [self.TRACE_HEADER_SIZE + 1])}
 
         if isinstance(name, int):
             if byte is not None:
@@ -61,10 +68,21 @@ class TraceHeader:
 
         self.name = name
         self.byte = byte or segyio.tracefield.keys[name]
-        self.standard_name = standard_byte_to_header[self.byte]
+        self.standard_name = standard_byte_to_header.get(self.byte)
+        self.dtype = dtype or standard_byte_to_len[self.byte]
+        self.byte_len = self.dtype
+
+        if isinstance(self.dtype, int):
+            self.dtype = 'i' + str(self.dtype)
+
+        if isinstance(self.byte_len, str):
+            self.byte_len = int(self.byte_len[-1])
+
+        if self.byte + self.byte_len > self.TRACE_HEADER_SIZE:
+            raise ValueError(f'{self.name} header position is out of bounds')
 
     def __eq__(self, other):
-        """ !!. """
+        """ Comparison of two headers by its attributes. """
         if isinstance(other, str):
             return self.name == other
 
