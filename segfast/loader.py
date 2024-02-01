@@ -5,7 +5,25 @@ from .memmap_loader import MemmapLoader
 
 
 def Loader(path, engine='memmap', endian='big', strict=False, ignore_geometry=True):
-    """ !!. """
+    """ Open SEG-Y file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the SEG-Y file
+    engine : 'memmap' or 'segyio'
+        Engine to load data from file: 'memmap' is based on numpy.memmap created for the whole file and 'segyio' is for
+        using segyio library instruments.
+    endian : 'big' or 'small'
+        Byte order in the file.
+    strict : bool
+
+    ignore_geometry : bool
+
+    Return
+    ------
+    :class:`~.memmap_loader.MemmapLoader` or :class:`~.segyio_loader.SegyioLoader`
+    """
     loader_class = _select_loader_class(engine)
     return loader_class(path=path, endian=endian, strict=strict, ignore_geometry=ignore_geometry)
 open = File = Loader
