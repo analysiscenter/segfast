@@ -96,8 +96,8 @@ class MemmapLoader(SegyioLoader):
 
             segfast_file.load_headers([181, 185])
 
-        * Load ``'CDP_X'`` and ``'CDP_Y'`` from non-standard bytes positions corresponding to some standard headers (i.e. load
-          ``'CDP_X'`` from bytes for ``'INLINE_3D'`` and ``'CDP_Y'`` from bytes for ``'CROSSLINE_3D'``):
+        * Load ``'CDP_X'`` and ``'CDP_Y'`` from non-standard bytes positions corresponding to some standard headers
+          (i.e. load  ``'CDP_X'`` from bytes for ``'INLINE_3D'`` and ``'CDP_Y'`` from bytes for ``'CROSSLINE_3D'``):
 
         .. code-block:: python
 

@@ -273,7 +273,8 @@ class SegyioLoader:
             An iterator over the entire SEG-Y traces.
             Each element in the iterator is a dictionary with ``'data'``, ``'start'`` and ``'end'`` keys.
         info : dict
-            Description of the iterator with ``'chunk_size'``, ``'n_chunks'``, ``'chunk_starts'`` and ``'chunk_ends'`` keys.
+            Description of the iterator with ``'chunk_size'``, ``'n_chunks'``, ``'chunk_starts'`` and ``'chunk_ends'``
+            keys.
         """
         # Parse input parameters
         if chunk_size is None and n_chunks is None:
