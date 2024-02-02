@@ -65,18 +65,22 @@ class MemmapLoader(SegyioLoader):
         Parameters
         ----------
         headers : sequence or dict
-            If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions or
-            to tuple of byte position and header dtype (see :class:`~.utils.TraceHeader`). Value can be None,
+            If sequence, names or bytes of headers to load. If ``dict``, mapping of header names to byte positions or
+            to tuple of byte position and header dtype (see :class:`~.utils.TraceHeader`). Value can be ``None``,
             than defaults from SEG-Y specification will be used.
         chunk_size : int
             Maximum amount of traces in each chunk.
-        max_workers : int or None
-            Maximum number of parallel processes to spawn. If None, then the number of CPU cores is used.
-        pbar : bool, str
+        max_workers : int, optional
+            Maximum number of parallel processes to spawn. If ``None``, then the number of CPU cores is used.
+        pbar : bool or str
             If bool, then whether to display progress bar over the file sweep.
             If str, then type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
         reconstruct_tsf : bool
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
+
+        Return
+        ------
+        ``pd.DataFrame``
 
         Examples
         --------
@@ -107,7 +111,7 @@ class MemmapLoader(SegyioLoader):
 
         """
         _ = kwargs
-        headers = self.make_headers(headers)
+        headers = self._make_headers_instances(headers)
 
         if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
             headers.remove('TRACE_SEQUENCE_FILE')
@@ -154,8 +158,8 @@ class MemmapLoader(SegyioLoader):
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
-    def make_headers(self, headers):
-        """ Transform headers list/dict to list of :class:`~.utils.TraceHeader` instances. """
+    def _make_headers_instances(self, headers):
+        """ Transform ``list/dict`` to list of :class:`~segfast.utils.TraceHeader` instances. """
         if isinstance(headers, dict):
             headers_ = []
             for header in headers:
@@ -175,23 +179,28 @@ class MemmapLoader(SegyioLoader):
 
     @staticmethod
     def _make_mmap_headers_dtype(headers, endian_symbol='>'):
-        """ Create list of `numpy` dtypes to view headers data.
+        """ Create list of :mod:`numpy` dtypes to view headers data.
 
         Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,
-        and the rest of bytes are lumped into `np.void` of certain lengths.
+        and the rest of bytes are lumped into :class:`numpy.void` of certain lengths.
 
         Only the headers data should be viewed under this dtype: the rest of trace data (values)
         should be processed (or skipped) separately.
 
-        We do not apply final conversion to `np.dtype` to the resulting list of dtypes so it is easier to append to it.
+        We do not apply final conversion to :class:`numpy.dtype` to the resulting list of dtypes so it is easie
+        to append to it.
 
         Examples
         --------
-        if `headers` are `INLINE_3D` and `CROSSLINE_3D`, which are 189-192 and 193-196 bytes, the output would be:
-        >>> [('unused_0', numpy.void, 188),
-        >>>  ('INLINE_3D', '>i4'),
-        >>>  ('CROSSLINE_3D', '>i4'),
-        >>>  ('unused_1', numpy.void, 44)]
+        If ``headers`` are ``'INLINE_3D'`` and ``'CROSSLINE_3D'``, which are 189-192 and 193-196 bytes, the output
+        would be:
+
+        .. code-block:: python
+
+            [('unused_0', numpy.void, 188),
+             ('INLINE_3D', '>i4'),
+             ('CROSSLINE_3D', '>i4'),
+             ('unused_1', numpy.void, 44)]
         """
         headers = sorted(headers, key=lambda x: x.byte)
 
@@ -229,8 +238,12 @@ class MemmapLoader(SegyioLoader):
             Indices (``'TRACE_SEQUENCE_FILE'``) of the traces to read.
         limits : sequence of ints, slice, optional
             Slice of the data along the depth axis.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+
+        Return
+        ------
+        numpy.ndarray
         """
         limits = self.process_limits(limits)
 
@@ -258,6 +271,10 @@ class MemmapLoader(SegyioLoader):
             Indices (ordinals) of the depth slices to read.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+
+        Return
+        ------
+        numpy.ndarray
         """
         depth_slices = self.data_mmap[:, indices]
         if self.file_format == 1:
@@ -319,6 +336,10 @@ class MemmapLoader(SegyioLoader):
             If str, then type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
         overwrite : bool
             Whether to overwrite existing ``path`` or raise an exception.
+
+        Return
+        ------
+        path : str
         """
         #pylint: disable=redefined-builtin
         # Default path
@@ -434,8 +455,8 @@ def convert_chunk(src_path, dst_path, shape, offset, src_dtype, dst_dtype, endia
 @njit(nogil=True, parallel=True)
 def ibm_to_ieee(hh, hl, lh, ll):
     """ Convert 4 arrays representing individual bytes of IBM 4-byte floats into a single array of floats.
-    Input arrays are ordered from most to least significant bytes and have `np.uint8` dtypes.
-    The result is returned as an `np.float32` array.
+    Input arrays are ordered from most to least significant bytes and have ``numpy.uint8`` dtypes.
+    The result is returned as an ``numpy.float32`` array.
     """
     # pylint: disable=not-an-iterable
     res = np.empty_like(hh, dtype=np.float32)

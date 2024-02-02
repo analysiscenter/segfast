@@ -44,11 +44,11 @@ class TraceHeader:
     Parameters
     ----------
     name : str or int
-        If str, name of the header. If int, is interpreted as 'byte' and name will be default from spec.
+        If str, name of the header. If int, is interpreted as ``'byte'`` and name will be default from spec.
     byte : int, optional
-        Byte position of the header, by default None. If None, default byte position from the spec will be used.
+        Byte position of the header, by default ``None``. If ``None``, default byte position from the spec will be used.
     dtype : int ot str, optional
-        dtype for header (e.g. 'i2', 'f4') or its length in bytes (then is interpreted as integer type).
+        dtype for header (e.g. ``'i2'``, ``'f4'``) or its length in bytes (then is interpreted as integer type).
     """
     TRACE_HEADER_SIZE = 240
 

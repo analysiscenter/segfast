@@ -12,14 +12,15 @@ def Loader(path, engine='memmap', endian='big', strict=False, ignore_geometry=Tr
     path : str
         Path to the SEG-Y file
     engine : 'memmap' or 'segyio'
-        Engine to load data from file: 'memmap' is based on numpy.memmap created for the whole file and 'segyio' is for
-        using segyio library instruments.
+        Engine to load data from file: ``'memmap'`` is based on :class:`numpy.memmap` created for the whole file and
+        ``'segyio'`` is for using **segyio** library instruments. in any case, **segyio** is used to load information
+        about the entire file (e.g. ``'sample_interval'`` or ``'shape'``).
     endian : 'big' or 'small'
         Byte order in the file.
     strict : bool
-
+        See :func:`segyio.open`
     ignore_geometry : bool
-
+        See :func:`segyio.open`
     Return
     ------
     :class:`~.memmap_loader.MemmapLoader` or :class:`~.segyio_loader.SegyioLoader`

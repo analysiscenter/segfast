@@ -7,13 +7,12 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'segfast'
-copyright = '2024, ak'
-author = 'ak'
+author = 'Analysis Center'
+copyright = '2024, ' + author
 
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('..')
-import segfast
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -29,7 +28,6 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.napoleon',
     'sphinx_rtd_theme',
-#    'numpydoc', # used to parse numpy-style docstrings for autodoc
 ]
 
 templates_path = ['_templates']
@@ -46,4 +44,11 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
 html_theme_options = {
     'logo_only': True
+}
+
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/', None),
+    'numpy': ('https://docs.scipy.org/doc/numpy/', None),
+    'segyio': ('https://segyio.readthedocs.io/en/latest/', None)
 }

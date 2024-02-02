@@ -10,17 +10,18 @@ from .utils import Notifier, TraceHeader
 
 
 class SegyioLoader:
-    """ A thin wrapper around `segyio` library for convenient loading of headers and traces.
+    """ A thin wrapper around **segyio** library for convenient loading of headers and traces.
 
-    Most of the methods directly call public API of `segyio`.
-    For trace loading we use private methods and attributes of ``segyio.SegyFile``, which allow:
-        - reading data into pre-defined buffer
-        - read only parts of the trace.
+    Most of the methods directly call public API of **segyio**.
+
+    For trace loading we use private methods and attributes of :class:`segyio.SegyFile`, which allow:
+
+       * reading data into pre-defined buffer
+       * read only parts of the trace
+
     This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,
     and up to 15% over public API in case of loading full lines (inlines or crosslines).
     """
-    TRACE_HEADER_SIZE = 240
-
     SEGY_FORMAT_TO_TRACE_DATA_DTYPE = {
         1:  "u1",  # IBM 4-byte float: has to be manually transformed to an IEEE float32
         2:  "i4",
@@ -109,7 +110,7 @@ class SegyioLoader:
         Parameters
         ----------
         headers : sequence or dict
-            If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions. Byte
+            If sequence, names or bytes of headers to load. If ``dict``, mapping of header names to byte positions. Byte
             position can be ``None``, than default value from SEG-Y specification will be used.
         reconstruct_tsf : bool
             Whether to reconstruct ``TRACE_SEQUENCE_FILE`` manually.
@@ -120,9 +121,13 @@ class SegyioLoader:
         pbar : bool, str
             If ``bool``, then whether to display progress bar over the file sweep.
             If ``str``, then type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
+
+        Return
+        ------
+        pandas.DataFrame
         """
         _ = kwargs
-        headers = self.make_headers(headers)
+        headers = self._make_headers_instances(headers)
 
         if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
             headers.remove('TRACE_SEQUENCE_FILE')
@@ -143,8 +148,8 @@ class SegyioLoader:
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
-    def make_headers(self, headers):
-        """ Transform headers list/dict to list of :class:`~.utils.TraceHeader` instances. """
+    def _make_headers_instances(self, headers):
+        """ Transform ``list``/``dict`` to list of :class:`~segfast.utils.TraceHeader` instances. """
         if isinstance(headers, dict):
             headers = [TraceHeader(header, byte=headers[header]) for header in headers]
         else:
@@ -222,6 +227,10 @@ class SegyioLoader:
             Indices (ordinals) of the depth slices to read.
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+
+        Return
+        ------
+        numpy.ndarray
         """
         if buffer is None:
             buffer = np.empty((len(indices), self.n_traces), dtype=self.dtype)
@@ -256,8 +265,8 @@ class SegyioLoader:
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies. Passed directly to :meth:`.load_traces`.
 
-        Returns
-        -------
+        Return
+        ------
         iterator, info : tuple with two elements
 
         iterator : iterable
@@ -328,7 +337,7 @@ class SegyioLoader:
 
 
 class SafeSegyioLoader(SegyioLoader):
-    """ A thin wrapper around `segyio` library for convenient loading of headers and traces.
+    """ A thin wrapper around **segyio** library for convenient loading of headers and traces.
 
     Unlike :class:`.SegyioLoader`, uses only public APIs to load traces.
 
