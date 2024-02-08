@@ -60,14 +60,13 @@ class TraceHeaderSpec:
     def __init__(self, name=None, start_byte=None, dtype=None, byteorder=None):
         self.name = name or self.STANDARD_BYTE_TO_HEADER[start_byte]
         self.start_byte = start_byte or segyio.tracefield.keys[name]
-        # self.standard_name = self.STANDARD_BYTE_TO_HEADER.get(self.start_byte)
 
         dtype = dtype or self.STANDARD_START_BYTE_TO_LEN[self.start_byte]
         if isinstance(dtype, int):
             dtype = 'i' + str(dtype)
 
         self.dtype = np.dtype(dtype)
-        if self.dtype.byteorder not in {'>', '<'} and byteorder is not None:
+        if dtype[0] not in {'>', '<'} and byteorder is not None:
             self.dtype = self.dtype.newbyteorder(byteorder)
 
         self.byte_len = self.dtype.itemsize
@@ -92,7 +91,7 @@ class TraceHeaderSpec:
     def standard_name(self):
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
-    def set_byteorder(self, byteorder):
+    def set_default_byteorder(self, byteorder):
         return type(self)(name=self.name, start_byte=self.start_byte, dtype=self.dtype, byteorder=byteorder)
 
 

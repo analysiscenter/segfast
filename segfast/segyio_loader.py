@@ -157,7 +157,7 @@ class SegyioLoader:
         headers_ = []
         for header in headers:
             if isinstance(header, TraceHeaderSpec):
-                headers_.append(header.set_byteorder(byteorder))
+                headers_.append(header.set_default_byteorder(byteorder))
             else:
                 if isinstance(header, str):
                     init_kwargs = {'name': header}
