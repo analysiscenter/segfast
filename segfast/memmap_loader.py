@@ -208,7 +208,7 @@ class MemmapLoader(SegyioLoader):
             unused_counter += 1
 
         for i, header in enumerate(headers):
-            header_dtype = (header.name, endian_symbol + header.dtype)
+            header_dtype = (header.name, str(header.dtype))
             dtype_list.append(header_dtype)
 
             next_byte_position = headers[i+1].start_byte if i+1 < len(headers) else TraceHeaderSpec.TRACE_HEADER_SIZE + 1

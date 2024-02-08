@@ -145,13 +145,16 @@ class SegyioLoader:
 
     def _make_headers_specs(self, headers):
         """ Make instances of TraceHeader. """
+        byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
+
         if headers == 'all':
-            return [TraceHeaderSpec(start_byte) for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
+            return [TraceHeaderSpec(start_byte, byteorder=byteorder)
+                    for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
 
         headers_ = []
         for header in headers:
             if isinstance(header, TraceHeaderSpec):
-                headers_.append(header)
+                headers_.append(header.set_byteorder(byteorder))
             else:
                 if isinstance(header, str):
                     init_kwargs = {'name': header}
@@ -162,6 +165,7 @@ class SegyioLoader:
                     init_kwargs = {arg_name: header[0], 'dtype': header[1]}
                 elif isinstance(header, dict):
                     init_kwargs = header
+                init_kwargs = {'byteorder': byteorder, **init_kwargs}
                 headers_.append(TraceHeaderSpec(**init_kwargs))
         return headers_
 

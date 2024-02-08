@@ -57,7 +57,7 @@ class TraceHeaderSpec:
     STANDARD_START_BYTE_TO_LEN = {start: end - start
                             for start, end in zip(START_BYTES, START_BYTES[1:] + [TRACE_HEADER_SIZE + 1])}
 
-    def __init__(self, name, start_byte=None, dtype=None):
+    def __init__(self, name, start_byte=None, dtype=None, byteorder=None):
         if isinstance(name, int):
             if start_byte is not None:
                 raise ValueError("'name' is int and 'byte' is defined")
@@ -65,15 +65,17 @@ class TraceHeaderSpec:
 
         self.name = name
         self.start_byte = start_byte or segyio.tracefield.keys[name]
-        self.standard_name = self.STANDARD_BYTE_TO_HEADER.get(self.start_byte)
-        self.dtype = dtype or self.STANDARD_START_BYTE_TO_LEN[self.start_byte]
-        self.byte_len = self.dtype
+        # self.standard_name = self.STANDARD_BYTE_TO_HEADER.get(self.start_byte)
 
-        if isinstance(self.dtype, int):
-            self.dtype = 'i' + str(self.dtype)
+        dtype = dtype or self.STANDARD_START_BYTE_TO_LEN[self.start_byte]
+        if isinstance(dtype, int):
+            dtype = 'i' + str(dtype)
 
-        if isinstance(self.byte_len, str):
-            self.byte_len = int(self.byte_len[-1])
+        self.dtype = np.dtype(dtype)
+        if self.dtype.byteorder not in {'>', '<'} and byteorder is not None:
+            self.dtype = self.dtype.newbyteorder(byteorder)
+
+        self.byte_len = self.dtype.itemsize
 
         if self.start_byte + self.byte_len > self.TRACE_HEADER_SIZE:
             raise ValueError(f'{self.name} header position is out of bounds')
@@ -82,9 +84,11 @@ class TraceHeaderSpec:
     def is_standard(self):
         return self.name in segyio.tracefield.keys and \
                self.start_byte == segyio.tracefield.keys[self.name] and \
-               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte]# and \
-            #    np.issubdtype(np.dtype, np.integer)
+               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte] and \
+               np.issubdtype(self.dtype, np.integer)
 
+    def set_byteorder(self, byteorder):
+        return type(self)(name=self.name, start_byte=self.start_byte, dtype=self.dtype, byteorder=byteorder)
 
 
 class ForPoolExecutor(Executor):
