@@ -138,12 +138,8 @@ class MemmapLoader(SegyioLoader):
         mmap_trace_dtype = np.dtype([*mmap_trace_headers_dtype,
                                      ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
 
-        print(mmap_trace_dtype)
-        dst_headers_dtype = []
-        for item in mmap_trace_headers_dtype:
-            if item[0].startswith('unused'):
-                continue
-            dst_headers_dtype.append((item[0], item[1][1:]))
+        dst_headers_dtype = [item for item in mmap_trace_headers_dtype if not item[0].startswith('unused')]
+        dst_headers_dtype = np.dtype(dst_headers_dtype).newbyteorder("=")
 
         # Split the whole file into chunks no larger than `chunk_size`
         n_chunks, last_chunk_size = divmod(self.n_traces, chunk_size)
@@ -173,8 +169,8 @@ class MemmapLoader(SegyioLoader):
                 for start, chunk_size_ in zip(chunk_starts, chunk_sizes):
                     future = executor.submit(read_chunk, path=self.path,
                                              shape=self.n_traces, offset=self.file_traces_offset,
-                                             dtype=mmap_trace_dtype, headers=headers,
-                                             start=start, chunk_size=chunk_size_)
+                                             mmap_dtype=mmap_trace_dtype, buffer_dtype=dst_headers_dtype,
+                                             headers=headers, start=start, chunk_size=chunk_size_)
                     future.add_done_callback(partial(callback, start=start))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
@@ -402,19 +398,17 @@ class MemmapLoader(SegyioLoader):
         return path
 
 
-def read_chunk(path, shape, offset, dtype, headers, start, chunk_size):
+def read_chunk(path, shape, offset, mmap_dtype, buffer_dtype, headers, start, chunk_size):
     """ Read headers from one chunk.
     We create memory mapping anew in each worker, as it is easier and creates no significant overhead.
     """
     # mmap is created over the entire file as
     # creating data over the requested chunk only does not speed up anything
-    mmap = np.memmap(filename=path, mode='r', shape=shape, offset=offset, dtype=dtype)
-    return np.array(mmap[[header.name for header in headers]][start : start + chunk_size])
+    mmap = np.memmap(filename=path, mode='r', shape=shape, offset=offset, dtype=mmap_dtype)
 
-    # buffer = np.empty((chunk_size, len(headers)), dtype=np.int32)
-    # for i, header in enumerate(headers):
-    #     buffer[:, i] = mmap[header.name][start : start + chunk_size]
-    # return buffer
+    buffer = np.empty(chunk_size, dtype=buffer_dtype)
+    buffer[:] = mmap[[header.name for header in headers]][start : start + chunk_size]
+    return buffer
 
 
 def convert_chunk(src_path, dst_path, shape, offset, src_dtype, dst_dtype, endian, transform, start, chunk_size):
