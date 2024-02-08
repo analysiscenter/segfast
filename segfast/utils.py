@@ -57,13 +57,8 @@ class TraceHeaderSpec:
     STANDARD_START_BYTE_TO_LEN = {start: end - start
                             for start, end in zip(START_BYTES, START_BYTES[1:] + [TRACE_HEADER_SIZE + 1])}
 
-    def __init__(self, name, start_byte=None, dtype=None, byteorder=None):
-        if isinstance(name, int):
-            if start_byte is not None:
-                raise ValueError("'name' is int and 'byte' is defined")
-            name = self.STANDARD_BYTE_TO_HEADER[name]
-
-        self.name = name
+    def __init__(self, name=None, start_byte=None, dtype=None, byteorder=None):
+        self.name = name or self.STANDARD_BYTE_TO_HEADER[start_byte]
         self.start_byte = start_byte or segyio.tracefield.keys[name]
         # self.standard_name = self.STANDARD_BYTE_TO_HEADER.get(self.start_byte)
 
@@ -86,6 +81,16 @@ class TraceHeaderSpec:
                self.start_byte == segyio.tracefield.keys[self.name] and \
                self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte] and \
                np.issubdtype(self.dtype, np.integer)
+
+    @property
+    def is_standard_except_name(self):
+        return self.start_byte == segyio.tracefield.keys[self.standard_name] and \
+               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte] and \
+               np.issubdtype(self.dtype, np.integer)
+
+    @property
+    def standard_name(self):
+        return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
     def set_byteorder(self, byteorder):
         return type(self)(name=self.name, start_byte=self.start_byte, dtype=self.dtype, byteorder=byteorder)

@@ -4,6 +4,7 @@ from copy import copy
 import numpy as np
 import pandas as pd
 
+import warnings
 import segyio
 from .utils import Notifier, TraceHeaderSpec
 
@@ -123,6 +124,8 @@ class SegyioLoader:
         """
         _ = kwargs
         headers = self._make_headers_specs(headers)
+        if not all([header.is_standard_except_name for header in headers]):
+            warnings.warn("All nonstandard trace headers byte positions and dtypes will be ignored.")
 
         if reconstruct_tsf:
             headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
