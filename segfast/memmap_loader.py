@@ -11,7 +11,7 @@ from numba import njit, prange
 
 
 from .segyio_loader import SegyioLoader
-from .utils import Notifier, ForPoolExecutor, TraceHeader
+from .utils import Notifier, ForPoolExecutor, TraceHeaderSpec
 
 
 
@@ -103,7 +103,7 @@ class MemmapLoader(SegyioLoader):
         ----------
         headers : sequence or dict
             If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions or
-            to tuple of byte position and header dtype (see :class:`~utils.TraceHeader`). Value can be None,
+            to tuple of byte position and header dtype (see :class:`~utils.TraceHeaderSpec`). Value can be None,
             than defaults from SEG-Y specification will be used.
         chunk_size : int
             Maximum amount of traces in each chunk.
@@ -128,10 +128,10 @@ class MemmapLoader(SegyioLoader):
         >>> segfast_file.load_headers({'CDP_X': (45, 'i4'), 'CDP_Y': (10, 'i2')})
         """
         _ = kwargs
-        headers = self.make_headers(headers)
+        headers = self._make_headers_specs(headers)
 
-        if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
-            headers.remove('TRACE_SEQUENCE_FILE')
+        if reconstruct_tsf:
+            headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
 
         # Construct mmap dtype: detailed for headers
         mmap_trace_headers_dtype = self._make_mmap_headers_dtype(headers, endian_symbol=self.endian_symbol)
@@ -175,20 +175,6 @@ class MemmapLoader(SegyioLoader):
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
-    def make_headers(self, headers):
-        """ Make instances of TraceHeader. """
-        if isinstance(headers, dict):
-            headers_ = []
-            for header in headers:
-                if isinstance(headers[header], (tuple, list)):
-                    byte, dtype = headers[header]
-                    headers_.append(TraceHeader(header, byte=byte, dtype=dtype))
-                else:
-                    headers_.append(TraceHeader(header, byte=headers[header]))
-        else:
-            headers_ = [TraceHeader(header) if isinstance(header, (int, str)) else header for header in headers]
-        return headers_
-
     def load_header(self, header, chunk_size=25_000, max_workers=None, pbar=False, **kwargs):
         """ Load exactly one header. """
         return self.load_headers(headers=[header], chunk_size=chunk_size, max_workers=max_workers,
@@ -214,19 +200,19 @@ class MemmapLoader(SegyioLoader):
         >>>  ('CROSSLINE_3D', '>i4'),
         >>>  ('unused_1', numpy.void, 44)]
         """
-        headers = sorted(headers, key=lambda x: x.byte)
+        headers = sorted(headers, key=lambda x: x.start_byte)
 
         unused_counter = 0
-        if headers[0].byte != 0:
-            dtype_list = [(f'unused_{unused_counter}', np.void, headers[0].byte - 1)]
+        if headers[0].start_byte != 0:
+            dtype_list = [(f'unused_{unused_counter}', np.void, headers[0].start_byte - 1)]
             unused_counter += 1
 
         for i, header in enumerate(headers):
             header_dtype = (header.name, endian_symbol + header.dtype)
             dtype_list.append(header_dtype)
 
-            next_byte_position = headers[i+1].byte if i+1 < len(headers) else TraceHeader.TRACE_HEADER_SIZE + 1
-            unused_len = next_byte_position - header.byte - header.byte_len
+            next_byte_position = headers[i+1].start_byte if i+1 < len(headers) else TraceHeaderSpec.TRACE_HEADER_SIZE + 1
+            unused_len = next_byte_position - header.start_byte - header.byte_len
             if unused_len > 0:
                 unused_header = (f'unused_{unused_counter}', np.void, unused_len)
                 dtype_list.append(unused_header)

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 import segyio
-from .utils import Notifier, TraceHeader
+from .utils import Notifier, TraceHeaderSpec
 
 
 
@@ -94,10 +94,10 @@ class SegyioLoader:
         """ Optionally add TSF header and sort columns of a headers dataframe. """
         if reconstruct_tsf:
             dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-            headers.append(TraceHeader('TRACE_SEQUENCE_FILE'))
+            headers.append(TraceHeaderSpec('TRACE_SEQUENCE_FILE'))
 
         if sort_columns:
-            headers_bytes = [item.byte for item in headers]
+            headers_bytes = [item.start_byte for item in headers]
             columns = np.array([item.name for item in headers])[np.argsort(headers_bytes)]
             dataframe = dataframe[columns]
         return dataframe
@@ -122,17 +122,17 @@ class SegyioLoader:
             If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
         """
         _ = kwargs
-        headers = self.make_headers(headers)
+        headers = self._make_headers_specs(headers)
 
-        if reconstruct_tsf and 'TRACE_SEQUENCE_FILE' in headers:
-            headers.remove('TRACE_SEQUENCE_FILE')
+        if reconstruct_tsf:
+            headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
 
         # Load data to buffer
         buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
         if tracewise:
             for i, header_ in Notifier(pbar, total=self.n_traces, frequency=1000)(enumerate(self.file_handler.header)):
                 for j, header in enumerate(headers):
-                    buffer[i, j] = header_.getfield(header_.buf, header.byte)
+                    buffer[i, j] = header_.getfield(header_.buf, header.start_byte)
         else:
             for i, header in enumerate(headers):
                 buffer[:, i] = self.load_header(header)
@@ -143,19 +143,33 @@ class SegyioLoader:
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
-    def make_headers(self, headers):
+    def _make_headers_specs(self, headers):
         """ Make instances of TraceHeader. """
-        if isinstance(headers, dict):
-            headers = [TraceHeader(header, byte=headers[header]) for header in headers]
-        else:
-            headers = [TraceHeader(header) if isinstance(header, (int, str)) else header for header in headers]
-        return headers
+        if headers == 'all':
+            return [TraceHeaderSpec(start_byte) for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
+
+        headers_ = []
+        for header in headers:
+            if isinstance(header, TraceHeaderSpec):
+                headers_.append(header)
+            else:
+                if isinstance(header, str):
+                    init_kwargs = {'name': header}
+                elif isinstance(header, int):
+                    init_kwargs = {'start_byte': header}
+                elif isinstance(header, tuple):
+                    arg_name = 'name' if isinstance(header[0], str) else 'start_byte'
+                    init_kwargs = {arg_name: header[0], 'dtype': header[1]}
+                elif isinstance(header, dict):
+                    init_kwargs = header
+                headers_.append(TraceHeaderSpec(**init_kwargs))
+        return headers_
 
     def load_header(self, header):
         """ Read one header from the file. """
         if isinstance(header, (int, str)):
-            header = TraceHeader(header)
-        return self.file_handler.attributes(header.byte)[:]
+            header = TraceHeaderSpec(header)
+        return self.file_handler.attributes(header.start_byte)[:]
 
     def make_tsf_header(self):
         """ Reconstruct the `TRACE_SEQUENCE_FILE` header. """

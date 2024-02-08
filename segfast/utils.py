@@ -1,7 +1,7 @@
 """ !!. """
 from functools import partial
 from concurrent.futures import Future, Executor
-import warnings
+import numpy as np
 import segyio
 
 
@@ -37,7 +37,7 @@ except ImportError:
 notifier = Notifier
 
 
-class TraceHeader:
+class TraceHeaderSpec:
     """ Trace header class to store its name and byte position. By default, byte position is defined by name
     accordingly to SEG-Y specification.
 
@@ -52,24 +52,21 @@ class TraceHeader:
     """
     TRACE_HEADER_SIZE = 240
 
-    def __init__(self, name, byte=None, dtype=None):
-        standard_byte_to_header = {v: k for k, v in segyio.tracefield.keys.items()}
-        start_bytes = sorted(segyio.tracefield.keys.values())
-        standard_byte_to_len = {start: end - start
-                                for start, end in zip(start_bytes, start_bytes[1:] + [self.TRACE_HEADER_SIZE + 1])}
+    STANDARD_BYTE_TO_HEADER = {v: k for k, v in segyio.tracefield.keys.items()}
+    START_BYTES = sorted(segyio.tracefield.keys.values())
+    STANDARD_START_BYTE_TO_LEN = {start: end - start
+                            for start, end in zip(START_BYTES, START_BYTES[1:] + [TRACE_HEADER_SIZE + 1])}
 
+    def __init__(self, name, start_byte=None, dtype=None):
         if isinstance(name, int):
-            if byte is not None:
+            if start_byte is not None:
                 raise ValueError("'name' is int and 'byte' is defined")
-            name = standard_byte_to_header[name]
-
-        if name not in segyio.tracefield.keys:
-            warnings.warn(f'{name} is not a standard header name')
+            name = self.STANDARD_BYTE_TO_HEADER[name]
 
         self.name = name
-        self.byte = byte or segyio.tracefield.keys[name]
-        self.standard_name = standard_byte_to_header.get(self.byte)
-        self.dtype = dtype or standard_byte_to_len[self.byte]
+        self.start_byte = start_byte or segyio.tracefield.keys[name]
+        self.standard_name = self.STANDARD_BYTE_TO_HEADER.get(self.start_byte)
+        self.dtype = dtype or self.STANDARD_START_BYTE_TO_LEN[self.start_byte]
         self.byte_len = self.dtype
 
         if isinstance(self.dtype, int):
@@ -78,15 +75,15 @@ class TraceHeader:
         if isinstance(self.byte_len, str):
             self.byte_len = int(self.byte_len[-1])
 
-        if self.byte + self.byte_len > self.TRACE_HEADER_SIZE:
+        if self.start_byte + self.byte_len > self.TRACE_HEADER_SIZE:
             raise ValueError(f'{self.name} header position is out of bounds')
 
-    def __eq__(self, other):
-        """ Comparison of two headers by its attributes. """
-        if isinstance(other, str):
-            return self.name == other
-
-        return self.__dict__ == other.__dict__
+    @property
+    def is_standard(self):
+        return self.name in segyio.tracefield.keys and \
+               self.start_byte == segyio.tracefield.keys[self.name] and \
+               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte]# and \
+            #    np.issubdtype(np.dtype, np.integer)
 
 
 
