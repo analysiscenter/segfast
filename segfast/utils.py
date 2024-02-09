@@ -86,6 +86,8 @@ class TraceHeaderSpec:
 
     @property
     def standard_name(self):
+        if not self.is_standard_except_name:
+            raise ValueError("The header has non-standard start byte or dtype")
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
     def set_default_byteorder(self, byteorder):
