@@ -174,8 +174,7 @@ class SegyioLoader:
 
     def load_header(self, header):
         """ Read one header from the file. """
-        if isinstance(header, (int, str)):
-            header = TraceHeaderSpec(header)
+        header = self._make_headers_specs([header])[0]
         return self.file_handler.attributes(header.start_byte)[:]
 
     def make_tsf_header(self):
