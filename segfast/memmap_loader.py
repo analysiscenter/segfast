@@ -101,10 +101,13 @@ class MemmapLoader(SegyioLoader):
 
         Parameters
         ----------
-        headers : sequence or dict
-            If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions or
-            to tuple of byte position and header dtype (see :class:`~utils.TraceHeaderSpec`). Value can be None,
-            than defaults from SEG-Y specification will be used.
+        headers : sequence
+            An array-like where each element can be:
+                - str -- header name,
+                - int -- header starting byte,
+                - :class:~`.utils.TraceHeaderSpec` -- used as is,
+                - tuple -- args to init :class:~`.utils.TraceHeaderSpec`,
+                - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
@@ -122,13 +125,13 @@ class MemmapLoader(SegyioLoader):
         Standard headers from 181 and 185 bytes with standard dtypes:
         >>> segfast_file.load_headers([181, 185])
         Load 'CDP_X' and 'CDP_Y' from non-standard bytes positions corresponding to some standard headers (i.e. load
-        'CDP_X' from bytes for 'INLINE_3D' and 'CDP_Y' from bytes for 'CROSSLINE_3D'):
-        >>> segfast_file.load_headers({'CDP_X': 189, 'CDP_Y': 193})
+        'CDP_X' from bytes for 'INLINE_3D' with '<i4' dtype and 'CDP_Y' from bytes for 'CROSSLINE_3D'):
+        >>> segfast_file.load_headers([{'name': 'CDP_X', 'start_byte': 189, 'dtype': '<i4'}, ('CDP_Y', 193)])
         Load 'CDP_X' and 'CDP_Y' from arbitrary positions:
-        >>> segfast_file.load_headers({'CDP_X': (45, 'i4'), 'CDP_Y': (10, 'i2')})
+        >>> segfast_file.load_headers([('CDP_X', 45, '>f4'), ('CDP_Y', 10, '>f4')])
         """
         _ = kwargs
-        headers = self._make_headers_specs(headers)
+        headers = self.make_headers_specs(headers)
 
         if reconstruct_tsf:
             headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
@@ -154,7 +157,6 @@ class MemmapLoader(SegyioLoader):
         executor_class = ForPoolExecutor if max_workers == 1 else ProcessPoolExecutor
 
         # Iterate over chunks
-        # buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
         buffer = np.empty(shape=self.n_traces, dtype=dst_headers_dtype)
 
         with Notifier(pbar, total=self.n_traces) as progress_bar:
@@ -215,7 +217,10 @@ class MemmapLoader(SegyioLoader):
             header_dtype = (header.name, str(header.dtype))
             dtype_list.append(header_dtype)
 
-            next_byte_position = headers[i+1].start_byte if i+1 < len(headers) else TraceHeaderSpec.TRACE_HEADER_SIZE + 1
+            next_byte_position = headers[i+1].start_byte \
+                                 if i + 1 < len(headers) \
+                                 else TraceHeaderSpec.TRACE_HEADER_SIZE + 1
+
             unused_len = next_byte_position - header.start_byte - header.byte_len
             if unused_len > 0:
                 unused_header = (f'unused_{unused_counter}', np.void, unused_len)

@@ -1,10 +1,10 @@
 """ A thin wrapper around `segyio` for convenient loading of seismic traces. """
 from copy import copy
+import warnings
 
 import numpy as np
 import pandas as pd
 
-import warnings
 import segyio
 from .utils import Notifier, TraceHeaderSpec
 
@@ -109,9 +109,14 @@ class SegyioLoader:
 
         Parameters
         ----------
-        headers : sequence or dict
-            If sequence, names or bytes of headers to load. If dict, mapping of header names to byte positions. Byte
-            position can be None, than default value from SEG-Y specification will be used.
+        headers : sequence
+            An array-like where each element can be:
+                - str -- header name,
+                - int -- header starting byte,
+                - :class:~`.utils.TraceHeaderSpec` -- used as is,
+                - tuple -- args to init :class:~`.utils.TraceHeaderSpec`,
+                - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
+            Note that for :class:`.SegyioLoader` all nonstandard headers byte positions and dtypes will be ignored.
         reconstruct_tsf : bool
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
         sort_columns : bool
@@ -123,8 +128,8 @@ class SegyioLoader:
             If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
         """
         _ = kwargs
-        headers = self._make_headers_specs(headers)
-        if not all([header.is_standard_except_name for header in headers]):
+        headers = self.make_headers_specs(headers)
+        if not all(header.has_standard_location for header in headers):
             warnings.warn("All nonstandard trace headers byte positions and dtypes will be ignored.")
 
         if reconstruct_tsf:
@@ -146,8 +151,8 @@ class SegyioLoader:
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
 
-    def _make_headers_specs(self, headers):
-        """ Make instances of TraceHeader. """
+    def make_headers_specs(self, headers):
+        """ Make instances of TraceHeaderSpec. """
         byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
 
         if headers == 'all':
@@ -159,22 +164,21 @@ class SegyioLoader:
             if isinstance(header, TraceHeaderSpec):
                 headers_.append(header.set_default_byteorder(byteorder))
             else:
-                if isinstance(header, str):
-                    init_kwargs = {'name': header}
-                elif isinstance(header, int):
-                    init_kwargs = {'start_byte': header}
-                elif isinstance(header, tuple):
-                    arg_name = 'name' if isinstance(header[0], str) else 'start_byte'
-                    init_kwargs = {arg_name: header[0], 'dtype': header[1]}
-                elif isinstance(header, dict):
+                if isinstance(header, int):
+                    header = (None, header)
+                if not isinstance(header, (list, tuple, dict)):
+                    header = (header,)
+                if isinstance(header, dict):
                     init_kwargs = header
+                else:
+                    init_kwargs = dict(zip(['name', 'start_byte', 'dtype'], header))
                 init_kwargs = {'byteorder': byteorder, **init_kwargs}
                 headers_.append(TraceHeaderSpec(**init_kwargs))
         return headers_
 
     def load_header(self, header):
         """ Read one header from the file. """
-        header = self._make_headers_specs([header])[0]
+        header = self.make_headers_specs([header])[0]
         return self.file_handler.attributes(header.start_byte)[:]
 
     def make_tsf_header(self):

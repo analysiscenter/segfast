@@ -43,25 +43,30 @@ class TraceHeaderSpec:
 
     Parameters
     ----------
-    name : str or int
-        If str, name of the header. If int, is interpreted as 'byte' and name will be default from spec.
-    byte : int, optional
+    name : str
+        Name of the header.
+    start_byte : int, optional
         Byte position of the header, by default None. If None, default byte position from the spec will be used.
-    dtype : int ot str, optional
-        dtype for header (e.g. 'i2', 'f4') or its length in bytes (then is interpreted as integer type).
+    dtype : int, str or dtype, optional
+        dtype for header (e.g. 'i2', '>f4') or its length in bytes (then is interpreted as integer type).
+    byteorder : '>' or '<', optional
+        Endianness to use, if it's not defined by dtype. If None and dtype doesn't specify, architecture default
+        will be used.
     """
     TRACE_HEADER_SIZE = 240
 
-    STANDARD_BYTE_TO_HEADER = {v: k for k, v in segyio.tracefield.keys.items()}
-    START_BYTES = sorted(segyio.tracefield.keys.values())
-    STANDARD_START_BYTE_TO_LEN = {start: end - start
+    STANDARD_HEADER_TO_BYTE = segyio.tracefield.keys
+    STANDARD_BYTE_TO_HEADER = {v: k for k, v in STANDARD_HEADER_TO_BYTE.items()}
+
+    START_BYTES = sorted(STANDARD_HEADER_TO_BYTE.values())
+    STANDARD_BYTE_TO_LEN = {start: end - start
                             for start, end in zip(START_BYTES, START_BYTES[1:] + [TRACE_HEADER_SIZE + 1])}
 
     def __init__(self, name=None, start_byte=None, dtype=None, byteorder=None):
         self.name = name or self.STANDARD_BYTE_TO_HEADER[start_byte]
-        self.start_byte = start_byte or segyio.tracefield.keys[name]
+        self.start_byte = start_byte or self.STANDARD_HEADER_TO_BYTE[name]
 
-        dtype = dtype or self.STANDARD_START_BYTE_TO_LEN[self.start_byte]
+        dtype = dtype or self.STANDARD_BYTE_TO_LEN[self.start_byte]
         if isinstance(dtype, int):
             dtype = 'i' + str(dtype)
 
@@ -69,24 +74,30 @@ class TraceHeaderSpec:
         if isinstance(dtype, str) and dtype[0] not in {'>', '<'} and byteorder is not None:
             self.dtype = self.dtype.newbyteorder(byteorder)
 
-        self.byte_len = self.dtype.itemsize
-
         if self.start_byte + self.byte_len > self.TRACE_HEADER_SIZE:
             raise ValueError(f'{self.name} header position is out of bounds')
 
     @property
-    def is_standard(self):
-        return self.name in self.STANDARD_BYTE_TO_HEADER and self.is_standard_except_name
+    def byte_len(self):
+        """ The number of bytes for a header. """
+        return self.dtype.itemsize
 
     @property
-    def is_standard_except_name(self):
+    def is_standard(self):
+        """ Whether the header matches the specification. """
+        return self.name in self.STANDARD_BYTE_TO_HEADER and self.has_standard_location
+
+    @property
+    def has_standard_location(self):
+        """ Whether the header matches the specification, except maybe the name. """
         return self.start_byte in self.STANDARD_BYTE_TO_HEADER and \
-               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte] and \
+               self.byte_len == self.STANDARD_BYTE_TO_LEN[self.start_byte] and \
                np.issubdtype(self.dtype, np.integer)
 
     @property
     def standard_name(self):
-        if not self.is_standard_except_name:
+        """ The name from specification for header (if 'has_standard_location' is True). """
+        if not self.has_standard_location:
             raise ValueError("The header has non-standard start byte or dtype")
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
