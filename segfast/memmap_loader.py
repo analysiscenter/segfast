@@ -174,7 +174,7 @@ class MemmapLoader(SegyioLoader):
                     future.add_done_callback(partial(callback, start=start))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
-        dataframe = pd.DataFrame(buffer, columns=[header.name for header in headers], copy=False)
+        dataframe = pd.DataFrame(buffer, copy=False)
         dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
                                                        reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
         return dataframe
