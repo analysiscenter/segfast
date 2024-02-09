@@ -76,10 +76,7 @@ class TraceHeaderSpec:
 
     @property
     def is_standard(self):
-        return self.name in segyio.tracefield.keys and \
-               self.start_byte == segyio.tracefield.keys[self.name] and \
-               self.byte_len == self.STANDARD_START_BYTE_TO_LEN[self.start_byte] and \
-               np.issubdtype(self.dtype, np.integer)
+        return self.name in self.STANDARD_BYTE_TO_HEADER and self.is_standard_except_name
 
     @property
     def is_standard_except_name(self):
