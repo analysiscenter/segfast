@@ -48,7 +48,7 @@ class TraceHeaderSpec:
     start_byte : int, optional
         Byte position of the header, by default None. If None, default byte position from the spec will be used.
     dtype : int, str or dtype, optional
-        dtype for header (e.g. 'i2', '>f4') or its length in bytes (then is interpreted as integer type).
+        dtype for header (e.g. 'i2', '>f4', `np.float32`) or its length in bytes (then is interpreted as integer type).
     byteorder : '>' or '<', optional
         Endianness to use, if it's not defined by dtype. If None and dtype doesn't specify, architecture default
         will be used.
@@ -102,6 +102,7 @@ class TraceHeaderSpec:
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
     def set_default_byteorder(self, byteorder):
+        """ Set byteorder to use as default (if not specified by dtype). """
         return type(self)(name=self.name, start_byte=self.start_byte, dtype=self.dtype, byteorder=byteorder)
 
 
