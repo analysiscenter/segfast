@@ -66,7 +66,7 @@ class TraceHeaderSpec:
             dtype = 'i' + str(dtype)
 
         self.dtype = np.dtype(dtype)
-        if dtype[0] not in {'>', '<'} and byteorder is not None:
+        if isinstance(dtype, str) and dtype[0] not in {'>', '<'} and byteorder is not None:
             self.dtype = self.dtype.newbyteorder(byteorder)
 
         self.byte_len = self.dtype.itemsize
