@@ -77,7 +77,7 @@ class MemmapLoader(SegyioLoader):
 
         # Dtype of each trace
         # TODO: maybe, use `np.uint8` as dtype instead of `np.void` for headers as it has nicer repr
-        self.mmap_trace_dtype = np.dtype([('headers', np.void, self.TRACE_HEADER_SIZE),
+        self.mmap_trace_dtype = np.dtype([('headers', np.void, TraceHeaderSpec.TRACE_HEADER_SIZE),
                                           ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
         self.data_mmap = self._construct_data_mmap()
 
@@ -346,7 +346,8 @@ class MemmapLoader(SegyioLoader):
         # Compute target dtype, itemsize, size of the dst file
         dst_dtype = self.endian_symbol + self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[format]
         dst_itemsize = np.dtype(dst_dtype).itemsize
-        dst_size = self.file_traces_offset + self.n_traces * (self.TRACE_HEADER_SIZE + self.n_samples * dst_itemsize)
+        dst_size = self.file_traces_offset + \
+                   self.n_traces * (TraceHeaderSpec.TRACE_HEADER_SIZE + self.n_samples * dst_itemsize)
 
         # Exceptions
         traces = self.load_traces([0])
@@ -369,7 +370,7 @@ class MemmapLoader(SegyioLoader):
         dst_mmap[3225-1:3225-1+2] = np.array([format], dtype=self.endian_symbol + 'u2').view('u1')
 
         # Prepare dst dtype
-        dst_trace_dtype = np.dtype([('headers', np.void, self.TRACE_HEADER_SIZE),
+        dst_trace_dtype = np.dtype([('headers', np.void, TraceHeaderSpec.TRACE_HEADER_SIZE),
                                     ('data', dst_dtype, self.n_samples)])
 
         # Split the whole file into chunks no larger than `chunk_size`

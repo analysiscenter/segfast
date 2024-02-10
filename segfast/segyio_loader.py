@@ -20,8 +20,6 @@ class SegyioLoader:
     This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,
     and up to 15% over public API in case of loading full lines (inlines or crosslines).
     """
-    TRACE_HEADER_SIZE = 240
-
     SEGY_FORMAT_TO_TRACE_DATA_DTYPE = {
         1:  "u1",  # IBM 4-byte float: has to be manually transformed to an IEEE float32
         2:  "i4",
