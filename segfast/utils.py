@@ -104,7 +104,10 @@ class TraceHeaderSpec:
 
     def set_default_byteorder(self, byteorder):
         """ Set byteorder to use as default (if not specified by dtype). """
-        return type(self)(name=self.name, start_byte=self.start_byte, dtype=self.dtype, byteorder=byteorder)
+        dtype = self.dtype.str
+        if not self.has_explicit_byteorder:
+            dtype = dtype[1:]
+        return type(self)(name=self.name, start_byte=self.start_byte, dtype=dtype, byteorder=byteorder)
 
 
 class ForPoolExecutor(Executor):
