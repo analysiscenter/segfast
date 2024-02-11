@@ -141,7 +141,7 @@ class MemmapLoader(SegyioLoader):
         mmap_trace_dtype = np.dtype([*mmap_trace_headers_dtype,
                                      ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
 
-        dst_headers_dtype = [item for item in mmap_trace_headers_dtype if not item[0].startswith('unused')]
+        dst_headers_dtype = [(header.name, mmap_trace_dtype.fields[header.name][0]) for header in headers]
         dst_headers_dtype = np.dtype(dst_headers_dtype).newbyteorder("=")
 
         # Split the whole file into chunks no larger than `chunk_size`
