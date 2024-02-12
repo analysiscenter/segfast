@@ -105,14 +105,17 @@ class TraceHeaderSpec:
 
     @property
     def has_default_byteorder(self):
+        """ Whether default byteorder is defined. """
         return self.default_byteorder is not None
 
     @property
     def has_byteorder(self):
+        """ Whether byteorder is defined. """
         return self.has_explicit_byteorder or self.has_default_byteorder
 
     @property
     def byteorder(self):
+        """ Header byteorder (if defined). """
         if not self.has_byteorder:
             return None
         return self.dtype.str[0]
@@ -123,10 +126,10 @@ class TraceHeaderSpec:
         if not self.has_byteorder:
             dtype_str = dtype_str[1:]
         return self.name, self.start_byte, dtype_str
-    
+
     def __eq__(self, other):
         return self._spec_params == other._spec_params
-    
+
     def __hash__(self):
         return hash(self._spec_params)
 
