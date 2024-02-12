@@ -102,6 +102,33 @@ class TraceHeaderSpec:
             raise ValueError("The header has non-standard start byte or dtype")
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
 
+    @property
+    def has_default_byteorder(self):
+        return self.default_byteorder is not None
+
+    @property
+    def has_byteorder(self):
+        return self.has_explicit_byteorder or self.has_default_byteorder
+
+    @property
+    def byteorder(self):
+        if not self.has_byteorder:
+            return None
+        return self.dtype.str[0]
+
+    @property
+    def _spec_params(self):
+        dtype_str = self.dtype.str
+        if not self.has_byteorder:
+            dtype_str = dtype_str[1:]
+        return self.name, self.start_byte, dtype_str
+    
+    def __eq__(self, other):
+        return self._spec_params == other._spec_params
+    
+    def __hash__(self):
+        return hash(self._spec_params)
+
     def set_default_byteorder(self, byteorder):
         """ Set byteorder to use as default (if not specified by dtype). """
         dtype = self.dtype.str
