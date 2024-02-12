@@ -8,10 +8,10 @@ import pandas as pd
 import segyio
 from .trace_header_spec import TraceHeaderSpec
 from .utils import Notifier
+from .file_handler import BaseFileHandler
 
 
-
-class SegyioLoader:
+class SegyioLoader(BaseFileHandler):
     """ A thin wrapper around `segyio` library for convenient loading of headers and traces.
 
     Most of the methods directly call public API of `segyio`.
@@ -21,36 +21,8 @@ class SegyioLoader:
     This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,
     and up to 15% over public API in case of loading full lines (inlines or crosslines).
     """
-    SEGY_FORMAT_TO_TRACE_DATA_DTYPE = {
-        1:  "u1",  # IBM 4-byte float: has to be manually transformed to an IEEE float32
-        2:  "i4",
-        3:  "i2",
-        5:  "f4",
-        6:  "f8",
-        8:  "i1",
-        9:  "i8",
-        10: "u4",
-        11: "u2",
-        12: "u8",
-        16: "u1",
-    }
-
-    ENDIANNESS_TO_SYMBOL = {
-        "big": ">",
-        "msb": ">",
-
-        "little": "<",
-        "lsb": "<",
-    }
-
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
-        # Parse arguments for errors
-        if endian not in self.ENDIANNESS_TO_SYMBOL:
-            raise ValueError(f'Unknown endian {endian}, must be one of {self.ENDIANNESS_TO_SYMBOL}')
-
-        # Store arguments
-        self.path = path
-        self.endian = endian
+        super().__init__(path=path, endian=endian)
         self.strict = strict
         self.ignore_geometry = ignore_geometry
 
@@ -154,49 +126,6 @@ class SegyioLoader:
     def load_header(self, header, indices=None, **kwargs):
         """ Load exactly one header. """
         return self.load_headers([header], indices=indices, reconstruct_tsf=False, sort_columns=False, **kwargs)
-
-    @staticmethod
-    def postprocess_headers_dataframe(dataframe, headers, indices=None, reconstruct_tsf=True, sort_columns=True):
-        """ Optionally add TSF header and sort columns of a headers dataframe. """
-        if reconstruct_tsf:
-            if indices is None:
-                dtype = np.int32 if len(dataframe) < np.iinfo(np.int32).max else np.int64
-                tsf = np.arange(1, len(dataframe) + 1, dtype=dtype)
-            else:
-                tsf = np.array(indices) + 1
-            dataframe['TRACE_SEQUENCE_FILE'] = tsf
-            headers = headers + [TraceHeaderSpec('TRACE_SEQUENCE_FILE')]
-
-        if sort_columns:
-            headers_indices = np.argsort([item.start_byte for item in headers])
-            headers = [headers[i] for i in headers_indices]
-            dataframe = dataframe[[header.name for header in headers]]
-        return dataframe, headers
-
-    def make_headers_specs(self, headers):
-        """ Make instances of TraceHeaderSpec. """
-        byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
-
-        if headers == 'all':
-            return [TraceHeaderSpec(start_byte, byteorder=byteorder)
-                    for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
-
-        headers_ = []
-        for header in headers:
-            if isinstance(header, TraceHeaderSpec):
-                headers_.append(header.set_default_byteorder(byteorder))
-            else:
-                if isinstance(header, int):
-                    header = (None, header)
-                if isinstance(header, str):
-                    header = (header,)
-                if isinstance(header, dict):
-                    init_kwargs = header
-                else:
-                    init_kwargs = dict(zip(['name', 'start_byte', 'dtype'], header))
-                init_kwargs = {'byteorder': byteorder, **init_kwargs}
-                headers_.append(TraceHeaderSpec(**init_kwargs))
-        return headers_
 
 
     # Data loading: traces

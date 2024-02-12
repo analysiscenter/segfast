@@ -10,13 +10,13 @@ import pandas as pd
 from numba import njit, prange
 
 
-from .segyio_loader import SegyioLoader
+from .file_handler import BaseMemmapHandler
 from .trace_header_spec import TraceHeaderSpec
 from .utils import Notifier, ForPoolExecutor
 
 
 
-class MemmapLoader(SegyioLoader):
+class MemmapLoader(BaseMemmapHandler):
     """ Custom reader/writer for SEG-Y files.
     Relies on memory mapping mechanism for actual reads of headers and traces.
 
@@ -59,16 +59,13 @@ class MemmapLoader(SegyioLoader):
     """
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
         # Re-use most of the file-wide attributes from the `segyio` loader
-        super().__init__(path=path, endian=endian, strict=strict, ignore_geometry=ignore_geometry)
-
-        # Endian symbol for creating `numpy` dtypes
-        self.endian_symbol = self.ENDIANNESS_TO_SYMBOL[endian]
+        super().__init__(path=path, endian=endian)
 
         # Prefix attributes with `file`/`mmap` to avoid confusion.
-        # TODO: maybe, add `segy` prefix to the attributes of the base class?
-        self.file_format = self.metrics['format']
-        self.file_traces_offset = self.metrics['trace0']
-        self.file_trace_size = self.metrics['trace_bsize']
+        self.mmap_binary_header = np.memmap(path, mode='r', offset=3200, shape=1,
+                                            dtype=np.dtype(self._make_mmap_binary_header_dtype()))[0]
+        self.file_format = self.mmap_binary_header['Format']
+        self.dtype = np.dtype(self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[self.file_format])
 
         # Dtype for data of each trace
         mmap_trace_data_dtype = self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[self.file_format]
@@ -76,11 +73,31 @@ class MemmapLoader(SegyioLoader):
         self.mmap_trace_data_dtype = mmap_trace_data_dtype
         self.mmap_trace_data_size = self.n_samples if self.file_format != 1 else (self.n_samples, 4)
 
-        # Dtype of each trace
+        # # Dtype of each trace
         # TODO: maybe, use `np.uint8` as dtype instead of `np.void` for headers as it has nicer repr
         self.mmap_trace_dtype = np.dtype([('headers', np.void, TraceHeaderSpec.TRACE_HEADER_SIZE),
                                           ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
         self.data_mmap = self._construct_data_mmap()
+
+    @property
+    def file_traces_offset(self):
+        return 3600
+
+    @property
+    def n_traces(self):
+        n = self.mmap_binary_header['Traces']
+        trace_data_size = self.n_samples * self.dtype.itemsize
+        if self.file_format == 1:
+            trace_data_size *= 4
+
+        if n == 0:
+            n = (os.stat(self.path).st_size - self.file_traces_offset) // (TraceHeaderSpec.TRACE_HEADER_SIZE + trace_data_size)
+        return n
+
+    @property
+    def n_samples(self):
+        return self.mmap_binary_header['Samples']
+
 
     def _construct_data_mmap(self):
         """ Create a memory map with the first 240 bytes (headers) of each trace skipped. """
@@ -199,52 +216,10 @@ class MemmapLoader(SegyioLoader):
             return dataframe, headers
         return dataframe
 
-    @staticmethod
-    def _make_mmap_headers_dtype(headers):
-        """ Create list of `numpy` dtypes to view headers data.
-
-        Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,
-        and the rest of bytes are lumped into `np.void` of certain lengths.
-
-        Only the headers data should be viewed under this dtype: the rest of trace data (values)
-        should be processed (or skipped) separately.
-
-        We do not apply final conversion to `np.dtype` to the resulting list of dtypes so it is easier to append to it.
-
-        Examples
-        --------
-        if `headers` are `INLINE_3D` and `CROSSLINE_3D`, which are 189-192 and 193-196 bytes, the output would be:
-        >>> [('unused_0', numpy.void, 188),
-        >>>  ('INLINE_3D', '>i4'),
-        >>>  ('CROSSLINE_3D', '>i4'),
-        >>>  ('unused_1', numpy.void, 44)]
-        """
-        headers = sorted(headers, key=lambda x: x.start_byte)
-
-        if headers[0].start_byte != 1:
-            dtype_list = [('unused_0', np.void, headers[0].start_byte - 1)]
-            unused_counter = 1
-        else:
-            dtype_list = []
-            unused_counter = 0
-
-        for i, header in enumerate(headers):
-            header_dtype = (header.name, str(header.dtype))
-            dtype_list.append(header_dtype)
-
-            next_byte_position = headers[i+1].start_byte \
-                                 if i + 1 < len(headers) \
-                                 else TraceHeaderSpec.TRACE_HEADER_SIZE + 1
-
-            unused_len = next_byte_position - (header.start_byte + header.byte_len)
-            if unused_len > 0:
-                unused_header = (f'unused_{unused_counter}', np.void, unused_len)
-                dtype_list.append(unused_header)
-                unused_counter += 1
-            elif unused_len < 0:
-                raise ValueError(f'{header.name} header overlap')
-
-        return dtype_list
+    def load_header(self, header, chunk_size=25_000, max_workers=None, pbar=False, **kwargs):
+        """ Load exactly one header. """
+        return self.load_headers(headers=[header], chunk_size=chunk_size, max_workers=max_workers,
+                                 pbar=pbar, reconstruct_tsf=False, **kwargs)
 
 
     # Traces loading
