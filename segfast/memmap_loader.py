@@ -61,10 +61,9 @@ class MemmapLoader(BaseMemmapHandler):
         # Re-use most of the file-wide attributes from the `segyio` loader
         super().__init__(path=path, endian=endian)
 
-        # Prefix attributes with `file`/`mmap` to avoid confusion.
-        self.mmap_binary_header = np.memmap(path, mode='r', offset=3200, shape=1,
-                                            dtype=np.dtype(self._make_mmap_binary_header_dtype()))[0]
-        self.file_format = self.mmap_binary_header['Format']
+        # Read and process binary header
+        self.binary_header = self.load_binary_header()
+        self.file_format = self.binary_header['Format']
         self.dtype = np.dtype(self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[self.file_format])
 
         # Dtype for data of each trace
@@ -75,34 +74,71 @@ class MemmapLoader(BaseMemmapHandler):
 
         # # Dtype of each trace
         # TODO: maybe, use `np.uint8` as dtype instead of `np.void` for headers as it has nicer repr
-        self.mmap_trace_dtype = np.dtype([('headers', np.void, TraceHeaderSpec.TRACE_HEADER_SIZE),
+        mmap_trace_header_dtype = self._make_mmap_headers_dtype(self.make_headers_specs(list(TraceHeaderSpec.STANDARD_HEADER_TO_BYTE)))
+        self.mmap_trace_dtype = np.dtype([('headers', mmap_trace_header_dtype),
                                           ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
-        self.data_mmap = self._construct_data_mmap()
+
+        self.traces_mmap = self._construct_traces_mmap()
+
+    def load_binary_header(self):
+        mmap_binary_header = np.memmap(self.path, mode='r', offset=self.TEXTUAL_HEADER_LENGTH, shape=1,
+                                       dtype=np.dtype(self._make_mmap_binary_header_dtype()))[0]
+        return {item: mmap_binary_header[item] for item in mmap_binary_header.dtype.names}
+
+
+    @property
+    def sample_interval(self):
+        bin_sample_interval = self.binary_header['Interval']
+        trace_sample_interval = self.traces_mmap["headers"][0]['TRACE_SAMPLE_INTERVAL']
+        # 0 means undefined sample interval, so it is removed from the set
+        union_sample_interval = {bin_sample_interval, trace_sample_interval} - {0}
+
+        if len(union_sample_interval) != 1:
+            raise ValueError("Cannot infer sample interval from file headers: "
+                             "either both `Interval` (bytes 3217-3218 in the binary header) "
+                             "and `TRACE_SAMPLE_INTERVAL` (bytes 117-118 in the header of the first trace) "
+                             "are undefined or they have different values.")
+        return union_sample_interval.pop()
+
+    @property
+    def delay(self):
+        """ Delay recording time of seismic traces. """
+        return self.traces_mmap["headers"][0]['DelayRecordingTime']
+
+    @property
+    def sample_intreval(self):
+        return self.binary_header['Interval']
 
     @property
     def file_traces_offset(self):
-        return 3600
+        if self.binary_header['TracesOffset'] != 0:
+            return self.binary_header['TracesOffset']
+        return self.TEXTUAL_HEADER_LENGTH * (1 + self.binary_header['ExtendedTextualHeaders']) + self.BINARY_HEADER_LENGTH
+
 
     @property
     def n_traces(self):
-        n = self.mmap_binary_header['Traces']
-        trace_data_size = self.n_samples * self.dtype.itemsize
+        n = self.binary_header['Traces']
+        trace_data_length = self.n_samples * self.dtype.itemsize
         if self.file_format == 1:
-            trace_data_size *= 4
+            trace_data_length *= 4
 
-        if n == 0:
-            n = (os.stat(self.path).st_size - self.file_traces_offset) // (TraceHeaderSpec.TRACE_HEADER_SIZE + trace_data_size)
+        if n != 0:
+            return n
+
+        filesize = os.stat(self.path).st_size
+        n = (filesize - self.file_traces_offset) // (TraceHeaderSpec.TRACE_HEADER_SIZE + trace_data_length)
         return n
 
     @property
     def n_samples(self):
-        return self.mmap_binary_header['Samples']
+        return self.binary_header['Samples']
 
 
-    def _construct_data_mmap(self):
+    def _construct_traces_mmap(self):
         """ Create a memory map with the first 240 bytes (headers) of each trace skipped. """
         return np.memmap(filename=self.path, mode='r', shape=self.n_traces, dtype=self.mmap_trace_dtype,
-                         offset=self.file_traces_offset)["data"]
+                         offset=self.file_traces_offset)
 
 
     # Headers loading
@@ -241,9 +277,9 @@ class MemmapLoader(BaseMemmapHandler):
         limits = self.process_limits(limits)
 
         if self.file_format != 1:
-            traces = self.data_mmap[indices, limits]
+            traces = self.traces_mmap["data"][indices, limits]
         else:
-            traces = self.data_mmap[indices, limits.start:limits.stop]
+            traces = self.traces_mmap["data"][indices, limits.start:limits.stop]
             if limits.step != 1:
                 traces = traces[:, ::limits.step]
             traces = self._ibm_to_ieee(traces)
@@ -265,7 +301,7 @@ class MemmapLoader(BaseMemmapHandler):
         buffer : np.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
         """
-        depth_slices = self.data_mmap[:, indices]
+        depth_slices = self.traces_mmap["data"][:, indices]
         if self.file_format == 1:
             depth_slices = self._ibm_to_ieee(depth_slices)
         depth_slices = depth_slices.T
@@ -293,7 +329,7 @@ class MemmapLoader(BaseMemmapHandler):
     def __setstate__(self, state):
         """ Recreate instance from unpickled state, reopen source SEG-Y file and memmap. """
         super().__setstate__(state)
-        self.data_mmap = self._construct_data_mmap()
+        self.traces_mmap = self._construct_data_mmap()
 
 
     # Conversion to other SEG-Y formats (data dtype)

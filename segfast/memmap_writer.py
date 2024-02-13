@@ -2,18 +2,17 @@ import numpy as np
 from .file_handler import BaseMemmapHandler
 
 class MemmapWriter(BaseMemmapHandler):
-    def __init__(self, path, traces_header_spec, n_traces, n_samples,
-                 format=5, endian='big', encoding='utf8'):
+    def __init__(self, path, traces_header_spec, n_traces, n_samples, format=5, endian='big'):
         super().__init__(path, endian)
 
         self.traces_header_spec = self.make_headers_specs(traces_header_spec)
-        self.samples_dtype = np.float32
+        self.samples_dtype = np.dtype(self.endian_symbol + self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[format])
 
         traces_spec = np.dtype(self._make_mmap_headers_dtype(self.traces_header_spec) + [('data', self.samples_dtype, n_samples)])
         binary_header_spec = np.dtype(self._make_mmap_binary_header_dtype())
 
         self.file_dtype = [
-            ('textual_header', np.void, 3200),
+            ('textual_header', np.void, self.TEXTUAL_HEADER_LENGTH),
             ('binary_header', binary_header_spec),
             ('data', traces_spec, n_traces)
         ]

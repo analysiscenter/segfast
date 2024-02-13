@@ -26,6 +26,9 @@ class BaseFileHandler:
         "lsb": "<",
     }
 
+    TEXTUAL_HEADER_LENGTH = 3200
+    BINARY_HEADER_LENGTH = 400
+
     def __init__(self, path, endian='>'):
         # Parse arguments for errors
         if endian not in self.ENDIANNESS_TO_SYMBOL:
@@ -81,7 +84,54 @@ class BaseFileHandler:
         return dataframe
 
 class BaseMemmapHandler(BaseFileHandler):
-    BINARY_HEADER_NAME_TO_BYTE = segyio.binfield.keys
+    BINARY_HEADER_NAME_TO_BYTE = {
+        'JobID': 3201,
+        'LineNumber': 3205,
+        'ReelNumber': 3209,
+        'Traces': 3213,
+        'AuxTraces': 3215,
+        'Interval': 3217,
+        'IntervalOriginal': 3219,
+        'Samples': 3221,
+        'SamplesOriginal': 3223,
+        'Format': 3225,
+        'EnsembleFold': 3227,
+        'SortingCode': 3229,
+        'VerticalSum': 3231,
+        'SweepFrequencyStart': 3233,
+        'SweepFrequencyEnd': 3235,
+        'SweepLength': 3237,
+        'Sweep': 3239,
+        'SweepChannel': 3241,
+        'SweepTaperStart': 3243,
+        'SweepTaperEnd': 3245,
+        'Taper': 3247,
+        'CorrelatedTraces': 3249,
+        'BinaryGainRecovery': 3251,
+        'AmplitudeRecovery': 3253,
+        'MeasurementSystem': 3255,
+        'ImpulseSignalPolarity': 3257,
+        'VibratoryPolarity': 3259,
+        'ExtTraces': 3261,
+        'ExtAuxTraces': 3265,
+        'ExtSamples': 3269,
+        'ExtInterval': 3273,
+        'ExtIntervalOriginal': 3281,
+        'ExtSamplesOriginal': 3289,
+        'ExtEnsembleFold': 3293,
+        'IntergerConstant': 3297,
+        'Unassigned1': 3301,
+        'SEGYRevision': 3501,
+        'SEGYRevisionMinor': 3502,
+        'TraceFlag': 3503,
+        'ExtendedTextualHeaders': 3505,
+        'MaximumAdditionalTraceHeaders': 3507,
+        'TimeCode': 3511,
+        'NumFileTraces': 3513,
+        'TracesOffset': 3521,
+        'StanzaRecords': 3529,
+        'Unassigned2': 3533
+    }
 
     def _make_mmap_binary_header_dtype(self):
         binary_header_dtype = []
@@ -89,6 +139,8 @@ class BaseMemmapHandler(BaseFileHandler):
         for name, byte_len in zip(self.BINARY_HEADER_NAME_TO_BYTE.keys(), positions):
             if byte_len not in [1, 2, 4, 8]:
                 dtype = (np.void, byte_len)
+            elif name in ('ExtInterval', 'ExtIntervalOriginal'):
+                dtype = (self.endian_symbol + 'f8', )
             else:
                 dtype = (self.endian_symbol + 'i' + str(byte_len), )
             binary_header_dtype.append((name, *dtype))
@@ -117,7 +169,8 @@ class BaseMemmapHandler(BaseFileHandler):
         headers = sorted(headers, key=lambda x: x.start_byte)
 
         unused_counter = 0
-        if headers[0].start_byte != 0:
+        dtype_list = []
+        if headers[0].start_byte != 1:
             dtype_list = [(f'unused_{unused_counter}', np.void, headers[0].start_byte - 1)]
             unused_counter += 1
 
