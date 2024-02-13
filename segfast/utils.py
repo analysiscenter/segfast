@@ -76,7 +76,7 @@ class TraceHeaderSpec:
         if not self.has_explicit_byteorder and byteorder is not None:
             self.dtype = self.dtype.newbyteorder(byteorder)
 
-        if self.start_byte + self.byte_len > self.TRACE_HEADER_SIZE:
+        if self.start_byte + self.byte_len > self.TRACE_HEADER_SIZE + 1:
             raise ValueError(f'{self.name} header position is out of bounds')
 
     @property
