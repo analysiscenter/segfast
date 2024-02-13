@@ -209,7 +209,8 @@ class MemmapLoader(SegyioLoader):
         headers = sorted(headers, key=lambda x: x.start_byte)
 
         unused_counter = 0
-        if headers[0].start_byte != 0:
+        dtype_list = []
+        if headers[0].start_byte != 1:
             dtype_list = [(f'unused_{unused_counter}', np.void, headers[0].start_byte - 1)]
             unused_counter += 1
 
