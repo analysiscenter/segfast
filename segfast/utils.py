@@ -140,6 +140,9 @@ class TraceHeaderSpec:
             dtype = dtype[1:]
         return type(self)(name=self.name, start_byte=self.start_byte, dtype=dtype, byteorder=byteorder)
 
+    def __repr__(self):
+        return f"{type(self).__name__}(name='{self.name}', start_byte={self.start_byte}, dtype='{self.dtype.str}')"
+
 
 class ForPoolExecutor(Executor):
     """ A sequential executor of tasks in a for loop.
