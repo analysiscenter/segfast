@@ -37,8 +37,9 @@ notifier = Notifier
 
 class ForPoolExecutor(Executor):
     """ A sequential executor of tasks in a for loop.
-    Inherits `Executor` interface, so can serve as a drop-in replacement for either
-    `ThreadPoolExecutor` or `ProcessPoolExecutor` when threads or processes spawning is undesirable.
+    Inherits :class:`concurrent.futures.Executor` interface, so can serve as a drop-in replacement for either
+    :class:`concurrent.futures.ThreadPoolExecutor` or :class:`concurrent.futures.ProcessPoolExecutor` when threads or
+    processes spawning is undesirable.
     """
 
     def __init__(self, *args, **kwargs):
