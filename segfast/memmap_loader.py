@@ -11,7 +11,8 @@ from numba import njit, prange
 
 
 from .segyio_loader import SegyioLoader
-from .utils import Notifier, ForPoolExecutor, TraceHeaderSpec
+from .trace_header_spec import TraceHeaderSpec
+from .utils import Notifier, ForPoolExecutor
 
 
 
@@ -141,7 +142,7 @@ class MemmapLoader(SegyioLoader):
         mmap_trace_dtype = np.dtype([*mmap_trace_headers_dtype,
                                      ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
 
-        dst_headers_dtype = [(header.name, mmap_trace_dtype.fields[header.name][0]) for header in headers]
+        dst_headers_dtype = [(header.name, header.dtype.str) for header in headers]
         dst_headers_dtype = np.dtype(dst_headers_dtype).newbyteorder("=")
 
         # Split the whole file into chunks no larger than `chunk_size`
@@ -208,11 +209,12 @@ class MemmapLoader(SegyioLoader):
         """
         headers = sorted(headers, key=lambda x: x.start_byte)
 
-        unused_counter = 0
-        dtype_list = []
         if headers[0].start_byte != 1:
-            dtype_list = [(f'unused_{unused_counter}', np.void, headers[0].start_byte - 1)]
-            unused_counter += 1
+            dtype_list = [('unused_0', np.void, headers[0].start_byte - 1)]
+            unused_counter = 1
+        else:
+            dtype_list = []
+            unused_counter = 0
 
         for i, header in enumerate(headers):
             header_dtype = (header.name, str(header.dtype))
@@ -222,7 +224,7 @@ class MemmapLoader(SegyioLoader):
                                  if i + 1 < len(headers) \
                                  else TraceHeaderSpec.TRACE_HEADER_SIZE + 1
 
-            unused_len = next_byte_position - header.start_byte - header.byte_len
+            unused_len = next_byte_position - (header.start_byte + header.byte_len)
             if unused_len > 0:
                 unused_header = (f'unused_{unused_counter}', np.void, unused_len)
                 dtype_list.append(unused_header)

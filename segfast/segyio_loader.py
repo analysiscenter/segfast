@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 
 import segyio
-from .utils import Notifier, TraceHeaderSpec
+from .trace_header_spec import TraceHeaderSpec
+from .utils import Notifier
 
 
 
@@ -164,7 +165,7 @@ class SegyioLoader:
             else:
                 if isinstance(header, int):
                     header = (None, header)
-                if not isinstance(header, (list, tuple, dict)):
+                if isinstance(header, str):
                     header = (header,)
                 if isinstance(header, dict):
                     init_kwargs = header
