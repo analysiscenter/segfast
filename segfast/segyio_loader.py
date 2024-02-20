@@ -101,7 +101,8 @@ class SegyioLoader:
             dataframe = dataframe[columns]
         return dataframe
 
-    def load_headers(self, headers, reconstruct_tsf=True, sort_columns=True, tracewise=True, pbar=False, **kwargs):
+    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, tracewise=True, pbar=False,
+                     **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -115,6 +116,8 @@ class SegyioLoader:
                 - tuple -- args to init :class:~`.utils.TraceHeaderSpec`,
                 - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
             Note that for :class:`.SegyioLoader` all nonstandard headers byte positions and dtypes will be ignored.
+        indices : sequence or None
+            Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.
         reconstruct_tsf : bool
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
         sort_columns : bool
@@ -134,19 +137,26 @@ class SegyioLoader:
             headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
 
         # Load data to buffer
-        buffer = np.empty((self.n_traces, len(headers)), dtype=np.int32)
+        if indices is None:
+            n_traces = self.n_traces
+            indices = range(n_traces)
+        else:
+            n_traces = len(indices)
+        buffer = np.empty((n_traces, len(headers)), dtype=np.int32)
+
         if tracewise:
-            for i, header_ in Notifier(pbar, total=self.n_traces, frequency=1000)(enumerate(self.file_handler.header)):
+            for i, trace_ix in Notifier(pbar, total=n_traces, frequency=1000)(indices):
+                trace_headers = self.file_handler.header[trace_ix]
                 for j, header in enumerate(headers):
-                    buffer[i, j] = header_.getfield(header_.buf, header.start_byte)
+                    buffer[i, j] = trace_headers.getfield(trace_headers.buf, header.start_byte)
         else:
             for i, header in enumerate(headers):
-                buffer[:, i] = self.load_header(header)
+                buffer[:, i] = self.load_header(header, indices=indices)
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, columns=[item.name for item in headers], copy=False)
-        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
-                                                       reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
+        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers, reconstruct_tsf=reconstruct_tsf,
+                                                       sort_columns=sort_columns)
         return dataframe
 
     def make_headers_specs(self, headers):
