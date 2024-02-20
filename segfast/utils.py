@@ -15,11 +15,10 @@ except ImportError:
             def __init__(self, bar=False, total=None, **kwargs):
                 self.pbar = partial(tqdm, disable=not bar, total=total, **kwargs)
 
-            def __call__(self, iterable):
+            def __call__(self, iterator):
                 return self.pbar(iterator, total=self.total, disable=not self.pbar)
 
             def __enter__(self):
-                """ !!. """
                 return self.pbar()
 
             def __exit__(self, _, __, ___):
