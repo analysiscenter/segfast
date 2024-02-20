@@ -35,7 +35,6 @@ except ImportError:
 notifier = Notifier
 
 
-
 class ForPoolExecutor(Executor):
     """ A sequential executor of tasks in a for loop.
     Inherits `Executor` interface, so can serve as a drop-in replacement for either
