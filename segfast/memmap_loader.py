@@ -88,8 +88,8 @@ class MemmapLoader(SegyioLoader):
                          offset=self.file_traces_offset)["data"]
 
 
-    # Headers
-    def load_headers(self, headers, chunk_size=25_000, max_workers=4, pbar=False,
+    # Headers loading
+    def load_headers(self, headers, indices=None, chunk_size=25_000, max_workers=4, pbar=False,
                      reconstruct_tsf=True, sort_columns=True, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
@@ -109,6 +109,8 @@ class MemmapLoader(SegyioLoader):
                 - :class:~`.utils.TraceHeaderSpec` -- used as is,
                 - tuple -- args to init :class:~`.utils.TraceHeaderSpec`,
                 - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
+        indices : sequence or None
+            Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
@@ -130,6 +132,8 @@ class MemmapLoader(SegyioLoader):
         >>> segfast_file.load_headers([{'name': 'CDP_X', 'start_byte': 189, 'dtype': '<i4'}, ('CDP_Y', 193)])
         Load 'CDP_X' and 'CDP_Y' from arbitrary positions:
         >>> segfast_file.load_headers([('CDP_X', 45, '>f4'), ('CDP_Y', 10, '>f4')])
+        Load 'FieldRecord' header for the first 5 traces:
+        >>> segfast_file.load_headers(['FieldRecord'], indices=np.arange(5))
         """
         _ = kwargs
         headers = self.make_headers_specs(headers)
@@ -138,29 +142,36 @@ class MemmapLoader(SegyioLoader):
             headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
 
         # Construct mmap dtype: detailed for headers
-        mmap_trace_headers_dtype = self._make_mmap_headers_dtype(headers, endian_symbol=self.endian_symbol)
+        mmap_trace_headers_dtype = self._make_mmap_headers_dtype(headers)
         mmap_trace_dtype = np.dtype([*mmap_trace_headers_dtype,
                                      ('data', self.mmap_trace_data_dtype, self.mmap_trace_data_size)])
 
         dst_headers_dtype = [(header.name, header.dtype.str) for header in headers]
         dst_headers_dtype = np.dtype(dst_headers_dtype).newbyteorder("=")
 
-        # Split the whole file into chunks no larger than `chunk_size`
-        n_chunks, last_chunk_size = divmod(self.n_traces, chunk_size)
-        chunk_sizes = [chunk_size] * n_chunks
-        if last_chunk_size:
-            chunk_sizes += [last_chunk_size]
-        chunk_starts = np.cumsum([0] + chunk_sizes[:-1])
+        # Calculate the number of requested traces, chunks and a list of trace indices/slices for each chunk
+        if indices is None:
+            n_traces = self.n_traces
+            n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
+            if last_chunk_size:
+                n_chunks += 1
+            chunk_indices = [slice(i * chunk_size, (i + 1) * chunk_size) for i in range(n_chunks)]
+        else:
+            n_traces = len(indices)
+            n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
+            if last_chunk_size:
+                n_chunks += 1
+            chunk_indices = np.array_split(indices, n_chunks)
 
         # Process `max_workers` and select executor
         max_workers = os.cpu_count() if max_workers is None else max_workers
-        max_workers = min(len(chunk_sizes), max_workers)
+        max_workers = min(n_chunks, max_workers)
         executor_class = ForPoolExecutor if max_workers == 1 else ProcessPoolExecutor
 
         # Iterate over chunks
-        buffer = np.empty(shape=self.n_traces, dtype=dst_headers_dtype)
+        buffer = np.empty(shape=n_traces, dtype=dst_headers_dtype)
 
-        with Notifier(pbar, total=self.n_traces) as progress_bar:
+        with Notifier(pbar, total=n_traces) as progress_bar:
             with executor_class(max_workers=max_workers) as executor:
 
                 def callback(future, start):
@@ -169,26 +180,25 @@ class MemmapLoader(SegyioLoader):
                     buffer[start : start + chunk_size] = chunk_headers
                     progress_bar.update(chunk_size)
 
-                for start, chunk_size_ in zip(chunk_starts, chunk_sizes):
-                    future = executor.submit(read_chunk, path=self.path,
-                                             shape=self.n_traces, offset=self.file_traces_offset,
-                                             mmap_dtype=mmap_trace_dtype, buffer_dtype=dst_headers_dtype,
-                                             headers=headers, start=start, chunk_size=chunk_size_)
-                    future.add_done_callback(partial(callback, start=start))
+                for i, indices in enumerate(chunk_indices):
+                    future = executor.submit(read_chunk, path=self.path, shape=self.n_traces,
+                                             offset=self.file_traces_offset, mmap_dtype=mmap_trace_dtype,
+                                             buffer_dtype=dst_headers_dtype, headers=headers, indices=indices)
+                    future.add_done_callback(partial(callback, start=i * chunk_size))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, copy=False)
-        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers,
-                                                       reconstruct_tsf=reconstruct_tsf, sort_columns=sort_columns)
+        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers, reconstruct_tsf=reconstruct_tsf,
+                                                       sort_columns=sort_columns)
         return dataframe
 
-    def load_header(self, header, chunk_size=25_000, max_workers=None, pbar=False, **kwargs):
+    def load_header(self, header, indices=None, chunk_size=25_000, max_workers=4, pbar=False, **kwargs):
         """ Load exactly one header. """
-        return self.load_headers(headers=[header], chunk_size=chunk_size, max_workers=max_workers,
-                                 pbar=pbar, reconstruct_tsf=False, **kwargs)
+        return self.load_headers(headers=[header], indices=indices, chunk_size=chunk_size, max_workers=max_workers,
+                                 pbar=pbar, reconstruct_tsf=False, sort_columns=False, **kwargs)
 
     @staticmethod
-    def _make_mmap_headers_dtype(headers, endian_symbol='>'):
+    def _make_mmap_headers_dtype(headers):
         """ Create list of `numpy` dtypes to view headers data.
 
         Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,
@@ -235,7 +245,7 @@ class MemmapLoader(SegyioLoader):
         return dtype_list
 
 
-    # Data loading
+    # Traces loading
     def load_traces(self, indices, limits=None, buffer=None):
         """ Load traces by their indices.
         Under the hood, we use a pre-made memory mapping over the file, where trace data is viewed with a special dtype.
@@ -296,7 +306,7 @@ class MemmapLoader(SegyioLoader):
         return ibm_to_ieee(*array_bytes)
 
 
-    # Inner workingss
+    # Inner workings
     def __getstate__(self):
         """ Create pickling state from `__dict__` by setting SEG-Y file handler and memmap to `None`. """
         state = super().__getstate__()
@@ -407,16 +417,16 @@ class MemmapLoader(SegyioLoader):
         return path
 
 
-def read_chunk(path, shape, offset, mmap_dtype, buffer_dtype, headers, start, chunk_size):
+def read_chunk(path, shape, offset, mmap_dtype, buffer_dtype, headers, indices):
     """ Read headers from one chunk.
     We create memory mapping anew in each worker, as it is easier and creates no significant overhead.
     """
-    # mmap is created over the entire file as
-    # creating data over the requested chunk only does not speed up anything
     mmap = np.memmap(filename=path, mode='r', shape=shape, offset=offset, dtype=mmap_dtype)
+    headers_chunk = mmap[[header.name for header in headers]][indices]
 
-    buffer = np.empty(chunk_size, dtype=buffer_dtype)
-    buffer[:] = mmap[[header.name for header in headers]][start : start + chunk_size]
+    # Explicitly cast trace headers from mmap dtype to the target architecture dtype
+    buffer = np.empty_like(headers_chunk, dtype=buffer_dtype)
+    buffer[:] = headers_chunk
     return buffer
 
 
