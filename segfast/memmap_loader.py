@@ -69,9 +69,9 @@ class MemmapLoader(SegyioLoader):
             An array-like where each element can be:
                 - ``str`` -- header name,
                 - ``int`` -- header starting byte,
-                - :class:`~.utils.TraceHeaderSpec` -- used as is,
-                - ``tuple`` -- args to init :class:`~.utils.TraceHeaderSpec`,
-                - ``dict`` -- kwargs to init :class:`~.utils.TraceHeaderSpec`.
+                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,
+                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,
+                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int, optional

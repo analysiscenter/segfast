@@ -115,9 +115,9 @@ class SegyioLoader:
             An array-like where each element can be:
                 - ``str`` -- header name,
                 - ``int`` -- header starting byte,
-                - :class:`~.utils.TraceHeaderSpec` -- used as is,
-                - ``tuple`` -- args to init :class:`~.utils.TraceHeaderSpec`,
-                - ``dict`` -- kwargs to init :class:`~.utils.TraceHeaderSpec`.
+                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,
+                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,
+                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.
 
             Note that for :class:`.SegyioLoader` all nonstandard headers byte positions and dtypes will be ignored.
         reconstruct_tsf : bool
@@ -159,7 +159,7 @@ class SegyioLoader:
         return dataframe
 
     def make_headers_specs(self, headers):
-        """ Transform headers list to list of :class:`~.utils.TraceHeaderSpec` instances. """
+        """ Transform headers list to list of :class:`~.trace_header_spec.TraceHeaderSpec` instances. """
         byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
 
         if headers == 'all':
