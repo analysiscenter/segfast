@@ -89,8 +89,8 @@ class MemmapLoader(SegyioLoader):
 
 
     # Headers loading
-    def load_headers(self, headers, indices=None, chunk_size=25_000, max_workers=4, pbar=False,
-                     reconstruct_tsf=True, sort_columns=True, **kwargs):
+    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, chunk_size=25_000,
+                     max_workers=4, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -111,6 +111,10 @@ class MemmapLoader(SegyioLoader):
                 - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
         indices : sequence or None
             Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.
+        reconstruct_tsf : bool
+            Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
+        sort_columns : bool
+            Whether to sort columns in the resulting dataframe by their starting bytes.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
@@ -118,8 +122,6 @@ class MemmapLoader(SegyioLoader):
         pbar : bool, str
             If bool, then whether to display progress bar over the file sweep.
             If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
-        reconstruct_tsf : bool
-            Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
 
         Examples
         --------
