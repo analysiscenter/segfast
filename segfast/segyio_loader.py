@@ -345,10 +345,6 @@ class SegyioLoader:
                                         strict=self.strict, ignore_geometry=self.ignore_geometry)
         self.file_handler.mmap()
 
-    def __del__(self):
-        """ Close SEG-Y file handler on loader destruction. """
-        self.file_handler.close()
-
 
 class SafeSegyioLoader(SegyioLoader):
     """ A thin wrapper around `segyio` library for convenient loading of headers and traces.
