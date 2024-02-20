@@ -8,22 +8,19 @@ try:
 except ImportError:
     try:
         from tqdm.auto import tqdm
+        from functools import partial  # insert before import from tqdm
 
         class Notifier:
             """ tqdm notifier. """
-            def __init__(self, pbar, total, *args, **kwargs):
-                self.pbar = pbar
-                self.total = total
-                self.args = args
-                self.kwargs = kwargs
+            def __init__(self, bar=False, total=None, **kwargs):
+                self.pbar = partial(tqdm, disable=not bar, total=total, **kwargs)
 
-            def __call__(self, iterator, *args, **kwargs):
-                _ = args, kwargs
-                return tqdm(iterator, total=self.total, disable=not self.pbar)
+            def __call__(self, iterable):
+                return self.pbar(iterator, total=self.total, disable=not self.pbar)
 
             def __enter__(self):
                 """ !!. """
-                return tqdm(*self.args, total=self.total,**self.kwargs, disable=not self.pbar)
+                return self.pbar()
 
             def __exit__(self, _, __, ___):
                 pass
