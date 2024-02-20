@@ -111,7 +111,9 @@ class TraceHeaderSpec:
         return f"{class_name}(name='{self.name}', start_byte={self.start_byte}, dtype='{self._spec_params[2]}')"
 
     def to_tuple(self):
+        """ Make a tuple of input params of the header. """
         return self._spec_params
 
     def to_dict(self):
+        """ Make a dict of input params of the header. """
         return dict(zip(['name', 'start_byte', 'dtype'], self._spec_params))
