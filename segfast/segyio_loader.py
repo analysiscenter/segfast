@@ -174,10 +174,12 @@ class SegyioLoader:
                 headers_.append(TraceHeaderSpec(**init_kwargs))
         return headers_
 
-    def load_header(self, header):
+    def load_header(self, header, indices=None):
         """ Read one header from the file. """
         header = self.make_headers_specs([header])[0]
-        return self.file_handler.attributes(header.start_byte)[:]
+        if indices is None:
+            indices = slice(None)
+        return self.file_handler.attributes(header.start_byte)[indices]
 
     def make_tsf_header(self):
         """ Reconstruct the `TRACE_SEQUENCE_FILE` header. """
