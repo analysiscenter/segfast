@@ -4,29 +4,46 @@ import numpy as np
 import segyio
 
 class TraceHeaderSpec:
-    """ Trace header class to store its name and byte position. By default, byte position is defined by name
-    accordingly to SEG-Y specification.
+    """ Trace header class to store its name, byte position and dtype (including endianness). By default, byte position
+    is defined by name accordingly to SEG-Y specification.
 
     Parameters
     ----------
     name : str
         Name of the header.
     start_byte : int, optional
-        Byte position of the header, by default None. If None, default byte position from the spec will be used.
+        Byte position of the header, by default ``None``. If ``None``, default byte position from the spec will be used.
     dtype : int, str or dtype, optional
-        dtype for header (e.g. 'i2', '>f4', `np.float32`) or its length in bytes (then is interpreted as integer type).
+        dtype for header (e.g. ``'i2'``, ``'>f4'``, ``numpy.float32``) or its length in bytes (then is interpreted
+        as integer type).
     byteorder : '>' or '<', optional
-        Endianness to use, if it's not defined by dtype. If None and dtype doesn't specify, architecture default
-        will be used.
+        Endianness to use, if it's not defined by ``dtype``. If ``None`` and dtype doesn't specify it, architecture
+        default will be used.
     """
     TRACE_HEADER_SIZE = 240
 
     STANDARD_HEADER_TO_BYTE = segyio.tracefield.keys
+    """ Mapping from standard header name to its start byte.
+
+    :meta hide-value:
+    """
     STANDARD_BYTE_TO_HEADER = {v: k for k, v in STANDARD_HEADER_TO_BYTE.items()}
+    """ Mapping from start byte to header name accordingly to standard.
+
+    :meta hide-value:
+    """
 
     START_BYTES = sorted(STANDARD_HEADER_TO_BYTE.values())
+    """ List bytes positions for standard headers
+
+    :meta hide-value:
+    """
     STANDARD_BYTE_TO_LEN = {start: end - start
                             for start, end in zip(START_BYTES, START_BYTES[1:] + [TRACE_HEADER_SIZE + 1])}
+    """ Mapping from start byte to length of header in bytes accordingly to standard.
+
+    :meta hide-value:
+    """
 
     def __init__(self, name=None, start_byte=None, dtype=None, byteorder=None):
         self.name = name or self.STANDARD_BYTE_TO_HEADER[start_byte]
@@ -64,7 +81,7 @@ class TraceHeaderSpec:
 
     @property
     def standard_name(self):
-        """ The name from specification for header (if 'has_standard_location' is True). """
+        """ The name from specification for header (if ``has_standard_location`` is ``True``). """
         if not self.has_standard_location:
             raise ValueError("The header has non-standard start byte or dtype")
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]
@@ -100,7 +117,7 @@ class TraceHeaderSpec:
         return hash(self._spec_params)
 
     def set_default_byteorder(self, byteorder):
-        """ Set byteorder to use as default (if not specified by dtype). """
+        """ Set byteorder to use as a default, if not specified by ``dtype``. """
         dtype = self.dtype.str
         if not self.has_explicit_byteorder:
             dtype = dtype[1:]
