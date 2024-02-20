@@ -90,19 +90,8 @@ class SegyioLoader:
 
 
     # Headers
-    def postprocess_headers_dataframe(self, dataframe, headers, reconstruct_tsf=True, sort_columns=True):
-        """ Optionally add TSF header and sort columns of a headers dataframe. """
-        if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-
-        if sort_columns:
-            headers_bytes = [item.start_byte for item in headers]
-            columns = np.array([item.name for item in headers])[np.argsort(headers_bytes)]
-            dataframe = dataframe[columns]
-        return dataframe
-
-    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, tracewise=True, pbar=False,
-                     **kwargs):
+    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, return_specs=False,
+                     tracewise=True, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -122,6 +111,8 @@ class SegyioLoader:
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
         sort_columns : bool
             Whether to sort columns in the resulting dataframe by their starting bytes.
+        return_specs : bool
+            Whether to return header specs used to load trace headers.
         tracewise : bool
             Whether to iterate over the file in a trace-wise manner, instead of header-wise.
         pbar : bool, str
@@ -137,27 +128,50 @@ class SegyioLoader:
             headers = [header for header in headers if header.name != 'TRACE_SEQUENCE_FILE']
 
         # Load data to buffer
-        if indices is None:
-            n_traces = self.n_traces
-            indices = range(n_traces)
-        else:
-            n_traces = len(indices)
+        n_traces = self.n_traces if indices is None else len(indices)
         buffer = np.empty((n_traces, len(headers)), dtype=np.int32)
 
         if tracewise:
-            for i, trace_ix in Notifier(pbar, total=n_traces, frequency=1000)(indices):
+            indices_iter = range(n_traces) if indices is None else indices
+            for i, trace_ix in Notifier(pbar, total=n_traces, frequency=1000)(enumerate(indices_iter)):
                 trace_headers = self.file_handler.header[trace_ix]
                 for j, header in enumerate(headers):
                     buffer[i, j] = trace_headers.getfield(trace_headers.buf, header.start_byte)
         else:
+            indexer = slice(None) if indices is None else indices
             for i, header in enumerate(headers):
-                buffer[:, i] = self.load_header(header, indices=indices)
+                buffer[:, i] = self.file_handler.attributes(header.start_byte)[indexer]
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, columns=[item.name for item in headers], copy=False)
-        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers, reconstruct_tsf=reconstruct_tsf,
-                                                       sort_columns=sort_columns)
+        dataframe, headers = self.postprocess_headers_dataframe(dataframe, headers=headers, indices=indices,
+                                                                reconstruct_tsf=reconstruct_tsf,
+                                                                sort_columns=sort_columns)
+        if return_specs:
+            return dataframe, headers
         return dataframe
+
+    def load_header(self, header, indices=None, **kwargs):
+        """ Load exactly one header. """
+        return self.load_headers([header], indices=indices, reconstruct_tsf=False, sort_columns=False, **kwargs)
+
+    @staticmethod
+    def postprocess_headers_dataframe(dataframe, headers, indices=None, reconstruct_tsf=True, sort_columns=True):
+        """ Optionally add TSF header and sort columns of a headers dataframe. """
+        if reconstruct_tsf:
+            if indices is None:
+                dtype = np.int32 if len(dataframe) < np.iinfo(np.int32).max else np.int64
+                tsf = np.arange(1, len(dataframe) + 1, dtype=dtype)
+            else:
+                tsf = np.array(indices) + 1
+            dataframe['TRACE_SEQUENCE_FILE'] = tsf
+            headers = headers + [TraceHeaderSpec('TRACE_SEQUENCE_FILE')]
+
+        if sort_columns:
+            headers_indices = np.argsort([item.start_byte for item in headers])
+            headers = [headers[i] for i in headers_indices]
+            dataframe = dataframe[[header.name for header in headers]]
+        return dataframe, headers
 
     def make_headers_specs(self, headers):
         """ Make instances of TraceHeaderSpec. """
@@ -183,18 +197,6 @@ class SegyioLoader:
                 init_kwargs = {'byteorder': byteorder, **init_kwargs}
                 headers_.append(TraceHeaderSpec(**init_kwargs))
         return headers_
-
-    def load_header(self, header, indices=None):
-        """ Read one header from the file. """
-        header = self.make_headers_specs([header])[0]
-        if indices is None:
-            indices = slice(None)
-        return self.file_handler.attributes(header.start_byte)[indices]
-
-    def make_tsf_header(self):
-        """ Reconstruct the `TRACE_SEQUENCE_FILE` header. """
-        dtype = np.int32 if self.n_traces < np.iinfo(np.int32).max else np.int64
-        return np.arange(1, self.n_traces + 1, dtype=dtype)
 
 
     # Data loading: traces

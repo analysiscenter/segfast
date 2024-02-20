@@ -89,8 +89,8 @@ class MemmapLoader(SegyioLoader):
 
 
     # Headers loading
-    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, chunk_size=25_000,
-                     max_workers=4, pbar=False, **kwargs):
+    def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, return_specs=False,
+                     chunk_size=25_000, max_workers=4, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
         If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
 
@@ -115,6 +115,8 @@ class MemmapLoader(SegyioLoader):
             Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.
         sort_columns : bool
             Whether to sort columns in the resulting dataframe by their starting bytes.
+        return_specs : bool
+            Whether to return header specs used to load trace headers.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
@@ -157,13 +159,13 @@ class MemmapLoader(SegyioLoader):
             n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
             if last_chunk_size:
                 n_chunks += 1
-            chunk_indices = [slice(i * chunk_size, (i + 1) * chunk_size) for i in range(n_chunks)]
+            chunk_indices_list = [slice(i * chunk_size, (i + 1) * chunk_size) for i in range(n_chunks)]
         else:
             n_traces = len(indices)
             n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
             if last_chunk_size:
                 n_chunks += 1
-            chunk_indices = np.array_split(indices, n_chunks)
+            chunk_indices_list = np.array_split(indices, n_chunks)
 
         # Process `max_workers` and select executor
         max_workers = os.cpu_count() if max_workers is None else max_workers
@@ -182,22 +184,20 @@ class MemmapLoader(SegyioLoader):
                     buffer[start : start + chunk_size] = chunk_headers
                     progress_bar.update(chunk_size)
 
-                for i, indices in enumerate(chunk_indices):
+                for i, chunk_indices in enumerate(chunk_indices_list):
                     future = executor.submit(read_chunk, path=self.path, shape=self.n_traces,
                                              offset=self.file_traces_offset, mmap_dtype=mmap_trace_dtype,
-                                             buffer_dtype=dst_headers_dtype, headers=headers, indices=indices)
+                                             buffer_dtype=dst_headers_dtype, headers=headers, indices=chunk_indices)
                     future.add_done_callback(partial(callback, start=i * chunk_size))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, copy=False)
-        dataframe = self.postprocess_headers_dataframe(dataframe, headers=headers, reconstruct_tsf=reconstruct_tsf,
-                                                       sort_columns=sort_columns)
+        dataframe, headers = self.postprocess_headers_dataframe(dataframe, headers=headers, indices=indices,
+                                                                reconstruct_tsf=reconstruct_tsf,
+                                                                sort_columns=sort_columns)
+        if return_specs:
+            return dataframe, headers
         return dataframe
-
-    def load_header(self, header, indices=None, chunk_size=25_000, max_workers=4, pbar=False, **kwargs):
-        """ Load exactly one header. """
-        return self.load_headers(headers=[header], indices=indices, chunk_size=chunk_size, max_workers=max_workers,
-                                 pbar=pbar, reconstruct_tsf=False, sort_columns=False, **kwargs)
 
     @staticmethod
     def _make_mmap_headers_dtype(headers):
