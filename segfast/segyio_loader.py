@@ -94,7 +94,6 @@ class SegyioLoader:
         """ Optionally add TSF header and sort columns of a headers dataframe. """
         if reconstruct_tsf:
             dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-            headers.append(TraceHeaderSpec('TRACE_SEQUENCE_FILE'))
 
         if sort_columns:
             headers_bytes = [item.start_byte for item in headers]
