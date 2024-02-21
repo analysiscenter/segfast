@@ -156,13 +156,15 @@ class TraceHeaderSpecSelector:
         }
         self.dtype_np_to_str = {v: k for k, v in self.dtype_str_to_np.items()}
 
-        # Construct selector table
         WIDGET_HEIGHT = "30px"
+        BUTTON_WIDTH = "35px"
         title_layout = widgets.Layout(height=WIDGET_HEIGHT, width="auto", flex="1 1 auto")
+        button_layout = widgets.Layout(height=WIDGET_HEIGHT, width=BUTTON_WIDTH)
 
-        remove_layout = widgets.Layout(height=WIDGET_HEIGHT, min_width="35px", max_width="35px", flex="1 1 auto")
+        # Construct selector table
+
         self.remove_col = Column(widgets.HTML("", layout=title_layout),
-                                 partial(widgets.Button, icon="times", layout=remove_layout),
+                                 partial(widgets.Button, icon="times", layout=button_layout),
                                  item_callback=self.on_remove)
 
         name_layout = widgets.Layout(height=WIDGET_HEIGHT, width="auto", min_width="200px", flex="1 1 auto")
@@ -186,6 +188,7 @@ class TraceHeaderSpecSelector:
                                      partial(widgets.Dropdown, value="=", options=["=", ">", "<"],
                                              layout=endianness_layout),
                                      item_callback=self.on_selector_change)
+
         self.selector_table = Table(self.remove_col, self.name_col, self.start_byte_col, self.type_col,
                                     self.endianness_col)
         selector_title = widgets.HTML("<center><b>Trace headers loading specification</b></center>",
@@ -197,44 +200,42 @@ class TraceHeaderSpecSelector:
                                         flex="1 1 auto")
         headers_cols = [Column(widgets.BoundedIntText(value=i, min=0, max=self.file_n_traces-1, description="Index:",
                                                       style={"description_width": "initial"}, layout=title_layout),
-                               partial(widgets.HTML, value="", layout=headers_layout),
+                               partial(widgets.HTML, value="&ensp;-", layout=headers_layout),
                                title_callback=self.on_selector_change)
                         for i in range(n_traces)]
         self.headers_table = Table(*headers_cols)
         headers_title = widgets.HTML("<center><b>Trace indices and their headers</b></center>", layout=title_layout)
-        sample_button = widgets.Button(icon="random", layout=widgets.Layout(height=WIDGET_HEIGHT, max_width="35px", flex="1 1 auto"))  # Remove flex
-        sample_button.on_click(self.sample_traces)
+        sample_button = widgets.Button(icon="random", layout=button_layout)
+        sample_button.on_click(lambda _: self.resample_traces)
         self.headers_box = widgets.VBox([widgets.HBox([headers_title, sample_button]), self.headers_table.box])
 
-        # Construct selector widget box
-        placeholder = widgets.HTML(layout=widgets.Layout(height="30px", width="35px"))
+        # Construct a box for spec selection
+        placeholder = widgets.HTML(layout=button_layout)
         table_box = widgets.HBox([self.selector_box, placeholder, self.headers_box])
-        append_row_button = widgets.Button(icon="plus", layout=widgets.Layout(height=WIDGET_HEIGHT, max_width="35px"))
+        append_row_button = widgets.Button(icon="plus", layout=button_layout)
         append_row_button.on_click(lambda _: self.append_row())
         self.warn_list = []
         self.warn_box = widgets.HTML(layout=widgets.Layout(width="auto"))
         self.selector_box = widgets.VBox([table_box, append_row_button, self.warn_box])
 
-        # Construct textual headers box
-        LINE_LENGTH = 80
-        text_header_lines = []
+        # Construct a box with file textual headers
+        TEXT_HEADER_LINE_LENGTH = 80
+        text_header_list = []
         for text_header in self.loader.text:
             text_header = text_header.decode()
-            n_chars = len(text_header)
-            n_lines, mod = divmod(n_chars, LINE_LENGTH)
-            if mod:
-                n_lines += 1
-            text_header_lines.extend([text_header[i * LINE_LENGTH : (i + 1) * LINE_LENGTH] for i in range(n_lines)])
-        formatted_text_headers = "<br>".join(text_header_lines)
-        formatted_text_headers = f"<p style='line-height:1.25'> {formatted_text_headers} </p>"
-        self.text_box = widgets.HTML(formatted_text_headers)
+            text_header = "<br>".join(text_header[i : i + TEXT_HEADER_LINE_LENGTH]
+                                      for i in range(0, len(text_header), TEXT_HEADER_LINE_LENGTH))
+            text_header_list.append(text_header)
+        text_headers = "<br>".join(text_header_list)
+        text_headers = f"<p style='line-height:1.25'> {text_headers} </p>"
+        self.text_box = widgets.HTML(text_headers)
 
         # Construct a box with two tabs: one with spec selectors and another with textual headers
         self.box = widgets.Tab([self.selector_box, self.text_box], titles=["Spec selectors", "Textual headers"],
                                layout=widgets.Layout(width="fit-content"))
 
-        # Initialize table with passed headers and load them
-        self.init_headers(headers)
+        # Initialize the table with passed headers and load them
+        self._init_tables(headers)
         display(self.box)
 
     @property
@@ -289,8 +290,8 @@ class TraceHeaderSpecSelector:
             headers_list.append(header)
         return headers_list
 
-    def init_headers(self, headers=None):
-        if headers is None:
+    def _init_tables(self, headers=None):
+        if headers is None or len(headers) == 0:
             self.append_row()
             return
         headers_list = self.loader.make_headers_specs(headers)
@@ -305,8 +306,6 @@ class TraceHeaderSpecSelector:
     def append_row(self):
         self.selector_table.append_row()
         self.headers_table.append_row()
-        for col in self.headers_table.columns:
-            col.items[-1].value = "&ensp;-"
 
     def remove_row(self, i):
         self.selector_table.remove_row(i)
@@ -315,7 +314,7 @@ class TraceHeaderSpecSelector:
     def on_remove(self, button):
         i = self.remove_col.get_item_row(button)
         self.remove_row(i)
-        self.reload_headers()  # May help in case of overlying header bytes
+        self.reload_headers()
 
     def on_name_change(self, change):
         try:
@@ -356,7 +355,7 @@ class TraceHeaderSpecSelector:
         _ = change
         self.reload_headers()
 
-    def sample_traces(self, _):
+    def resample_traces(self):
         trace_ix = np.random.randint(self.file_n_traces - 1, size=self.n_traces)
         with self.selector_table.ignore_events():
             for ix, col in zip(trace_ix, self.headers_table.columns):
