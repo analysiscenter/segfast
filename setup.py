@@ -31,6 +31,12 @@ setup(
         'numba>=0.54.0',
         'segyio>=1.9.0',
     ],
+    extras_require={
+        'interactive': [
+            'ipython>=8.0.0',
+            'ipywidgets>=8.0.0',
+        ]
+    },
     classifiers=[
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: OS Independent',
@@ -38,5 +44,4 @@ setup(
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
     ],
-
 )
