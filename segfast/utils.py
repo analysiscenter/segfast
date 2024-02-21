@@ -97,7 +97,7 @@ class DelayedImport:
     __file__ = globals()["__file__"]
     __path__ = [os.path.dirname(__file__)]
 
-    def __init__(self, module, package=None, attribute=None, help=None):
+    def __init__(self, module, package=None, attribute=None, help=None):  # pylint: disable=redefined-builtin
         self.module, self.package, self.attribute = module, package, attribute
         self.help = help
         self._loaded_module = None

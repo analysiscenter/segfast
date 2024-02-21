@@ -82,6 +82,7 @@ class Column:
         for i, col_item in enumerate(self.items):
             if item is col_item:
                 return i
+        return None
 
     @contextmanager
     def ignore_events(self):
@@ -245,7 +246,7 @@ class TraceHeaderSpecSelector:
     @property
     def headers(self):
         return self.get_headers(warn=False)
-    
+
     def get_headers(self, warn=True):
         widget_iter = zip(self.name_col.items, self.start_byte_col.items,
                           self.type_col.items, self.endianness_col.items)
@@ -319,7 +320,7 @@ class TraceHeaderSpecSelector:
     def on_name_change(self, change):
         try:
             header_spec = TraceHeaderSpec(change["new"])
-        except:
+        except:  # pylint: disable=bare-except
             self.reload_headers()
             return
 
@@ -337,7 +338,7 @@ class TraceHeaderSpecSelector:
         """Autocomplete trace header name and dtype by start byte."""
         try:
             header_spec = TraceHeaderSpec(start_byte=int(change["new"]))
-        except:
+        except:  # pylint: disable=bare-except
             self.reload_headers()
             return
 
@@ -386,8 +387,7 @@ class TraceHeaderSpecSelector:
                     self.warn(f"{last_header.name} and {header.name} headers overlap, "
                               f"{header.name} header won't be loaded")
                     continue
-                else:
-                    res_headers.append(header)
+                res_headers.append(header)
             df = self.loader.load_headers(res_headers, indices=self.trace_indices, reconstruct_tsf=False,
                                           sort_columns=False)
             headers_dict = df.to_dict("list")
