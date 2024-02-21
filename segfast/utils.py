@@ -6,8 +6,8 @@ try:
     from batchflow import Notifier
 except ImportError:
     try:
+        from functools import partial
         from tqdm.auto import tqdm
-        from functools import partial  # insert before import from tqdm
 
         class Notifier:
             """ tqdm notifier. """
