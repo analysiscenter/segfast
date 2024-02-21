@@ -12,10 +12,12 @@ except ImportError:
         class Notifier:
             """ tqdm notifier. """
             def __init__(self, bar=False, total=None, **kwargs):
+                if 'frequency' in kwargs:
+                    kwargs['miniters'] = kwargs.pop('frequency')
                 self.pbar = partial(tqdm, disable=not bar, total=total, **kwargs)
 
             def __call__(self, iterator):
-                return self.pbar(iterator, total=self.total, disable=not self.pbar)
+                return self.pbar(iterator)
 
             def __enter__(self):
                 return self.pbar()
