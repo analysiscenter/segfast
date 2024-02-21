@@ -207,7 +207,7 @@ class TraceHeaderSpecSelector:
         self.headers_table = Table(*headers_cols)
         headers_title = widgets.HTML("<center><b>Trace indices and their headers</b></center>", layout=title_layout)
         sample_button = widgets.Button(icon="random", layout=button_layout)
-        sample_button.on_click(lambda _: self.resample_traces)
+        sample_button.on_click(lambda _: self.resample_traces())
         self.headers_box = widgets.VBox([widgets.HBox([headers_title, sample_button]), self.headers_table.box])
 
         # Construct a box for spec selection
@@ -223,12 +223,12 @@ class TraceHeaderSpecSelector:
         TEXT_HEADER_LINE_LENGTH = 80
         text_header_list = []
         for text_header in self.loader.text:
-            text_header = text_header.decode()
+            text_header = text_header.decode(errors="replace")
             text_header = "<br>".join(text_header[i : i + TEXT_HEADER_LINE_LENGTH]
                                       for i in range(0, len(text_header), TEXT_HEADER_LINE_LENGTH))
             text_header_list.append(text_header)
         text_headers = "<br>".join(text_header_list)
-        text_headers = f"<p style='line-height:1.25'> {text_headers} </p>"
+        text_headers = f"<p style='line-height:1.25;font-family:monospace'> {text_headers} </p>"
         self.text_box = widgets.HTML(text_headers)
 
         # Construct a box with two tabs: one with spec selectors and another with textual headers
