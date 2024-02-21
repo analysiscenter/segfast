@@ -1,5 +1,4 @@
 """ !!. """
-from functools import partial
 from concurrent.futures import Future, Executor
 
 
@@ -7,12 +6,25 @@ try:
     from batchflow import Notifier
 except ImportError:
     try:
+        from functools import partial
         from tqdm.auto import tqdm
-        def Notifier(pbar, *args, **kwargs):
-            """ Progress bar. """
-            if pbar:
-                return tqdm(*args, **kwargs)
-            return lambda iterator: iterator
+
+        class Notifier:
+            """ tqdm notifier. """
+            def __init__(self, bar=False, total=None, **kwargs):
+                if 'frequency' in kwargs:
+                    kwargs['miniters'] = kwargs.pop('frequency')
+                self.pbar = partial(tqdm, disable=not bar, total=total, **kwargs)
+
+            def __call__(self, iterator):
+                return self.pbar(iterator)
+
+            def __enter__(self):
+                return self.pbar()
+
+            def __exit__(self, _, __, ___):
+                pass
+
     except ImportError:
         class Notifier:
             """ Dummy notifier. """
