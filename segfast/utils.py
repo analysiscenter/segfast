@@ -1,12 +1,12 @@
 """ !!. """
 from concurrent.futures import Future, Executor
+from functools import partial
 
 
 try:
     from batchflow import Notifier
 except ImportError:
     try:
-        from functools import partial
         from tqdm.auto import tqdm
 
         class Notifier:
