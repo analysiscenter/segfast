@@ -137,6 +137,11 @@ class Table:
 
 
 class TraceHeaderSpecSelector:
+    """ A class that defines a widget which allows specifying custom start bytes, dtypes and endiannesses of trace
+    headers and displays loaded values for a subset of traces. Prints textual headers of the file in a separate tab
+    since they usually contain information about headers' locations. The currently selected header specs can be
+    accessed via `headers` property. """
+
     def __init__(self, path, endian="big", headers=None, n_traces=3):
         self.loader = MemmapLoader(path, endian=endian)
         self.file_n_traces = self.loader.n_traces
@@ -241,13 +246,16 @@ class TraceHeaderSpecSelector:
 
     @property
     def trace_indices(self):
+        """ Indices of traces to load headers for. """
         return np.array([int(col.title.value) for col in self.headers_table.columns])
 
     @property
     def headers(self):
+        """ Currently selected headers specs. """
         return self.get_headers(warn=False)
 
     def get_headers(self, warn=True):
+        """ Get currently selected headers specs. Optionally warn about found spec problems. """
         widget_iter = zip(self.name_col.items, self.start_byte_col.items,
                           self.type_col.items, self.endianness_col.items)
         headers_list = []
@@ -292,6 +300,7 @@ class TraceHeaderSpecSelector:
         return headers_list
 
     def _init_tables(self, headers=None):
+        """ Init both widget tables with given header specs and corresponding values of headers. """
         if headers is None or len(headers) == 0:
             self.append_row()
             return
@@ -305,19 +314,23 @@ class TraceHeaderSpecSelector:
         self.reload_headers()
 
     def append_row(self):
+        """ Append a new empty row to the widget. """
         self.selector_table.append_row()
         self.headers_table.append_row()
 
     def remove_row(self, i):
+        """ Remove `i`-th row from the widget. """
         self.selector_table.remove_row(i)
         self.headers_table.remove_row(i)
 
     def on_remove(self, button):
+        """ Remove a row from the widget on click on the corresponding remove button. """
         i = self.remove_col.get_item_row(button)
         self.remove_row(i)
         self.reload_headers()
 
     def on_name_change(self, change):
+        """ Autocomplete trace header start byte and dtype if a standard header name was entered. """
         try:
             header_spec = TraceHeaderSpec(change["new"])
         except:  # pylint: disable=bare-except
@@ -335,7 +348,7 @@ class TraceHeaderSpecSelector:
         self.reload_headers()
 
     def on_start_byte_change(self, change):
-        """Autocomplete trace header name and dtype by start byte."""
+        """ Autocomplete trace header name and dtype if a standard header start byte was entered. """
         try:
             header_spec = TraceHeaderSpec(start_byte=int(change["new"]))
         except:  # pylint: disable=bare-except
@@ -353,28 +366,34 @@ class TraceHeaderSpecSelector:
         self.reload_headers()
 
     def on_selector_change(self, change):
+        """ Reload trace headers if any selector has changed. """
         _ = change
         self.reload_headers()
 
     def resample_traces(self):
+        """ Randomly sample new traces from the file to load trace header for. """
         trace_ix = np.random.randint(self.file_n_traces - 1, size=self.n_traces)
         with self.selector_table.ignore_events():
             for ix, col in zip(trace_ix, self.headers_table.columns):
                 col.title.value = ix
         self.reload_headers()
 
-    def update_warn_box(self):
+    def _update_warn_box(self):
+        """ Format all warnings to display in the warn widget. """
         self.warn_box.value = "<br>".join(self.warn_list)
 
     def warn(self, warning):
+        """ Warn about found spec problems. """
         self.warn_list.append(warning)
-        self.update_warn_box()
+        self._update_warn_box()
 
     def reset_warnings(self):
+        """ Clear the warn widget. """
         self.warn_list = []
-        self.update_warn_box()
+        self._update_warn_box()
 
     def reload_headers(self):
+        """ Reload and display trace headers for currently selected traces and headers specs. """
         self.reset_warnings()
         headers = sorted(self.get_headers(warn=True), key=lambda header: header.start_byte)
         if not headers:
@@ -399,6 +418,9 @@ class TraceHeaderSpecSelector:
 
 
 def select_pre_stack_header_specs(path, endian="big", headers=None, n_traces=3):
+    """ Interactively select trace headers specifications (name, start byte and data type) to properly load data from a
+    pre-stack SEG-Y file. The currently selected header specs can be accessed via `headers` property of the returned
+    object. """
     if headers is None:
         headers = [
             "FieldRecord", "TraceNumber", "offset", "SourceX", "SourceY", "SourceSurfaceElevation", "SourceUpholeTime",
@@ -409,6 +431,9 @@ def select_pre_stack_header_specs(path, endian="big", headers=None, n_traces=3):
 
 
 def select_post_stack_header_specs(path, endian="big", headers=None, n_traces=3):
+    """ Interactively select trace headers specifications (name, start byte and data type) to properly load data from a
+    post-stack SEG-Y file. The currently selected header specs can be accessed via `headers` property of the returned
+    object. """
     if headers is None:
         headers = ["TraceNumber", "CDP", "INLINE_3D", "CROSSLINE_3D", "CDP_X", "CDP_Y"]
     return TraceHeaderSpecSelector(path, endian=endian, headers=headers, n_traces=n_traces)
