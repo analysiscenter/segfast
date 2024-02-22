@@ -1,6 +1,7 @@
 """ Class to load headers/traces from SEG-Y via memory mapping. """
 
 import os
+from copy import copy
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 import dill
@@ -318,18 +319,26 @@ class MemmapLoader(BaseMemmapHandler):
             array_bytes = array_bytes[::-1]
         return ibm_to_ieee(*array_bytes)
 
+    # Inner workings
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _, __, ___):
+        pass
 
     # Inner workings
     def __getstate__(self):
         """ Create pickling state from `__dict__` by setting SEG-Y file handler and memmap to `None`. """
-        state = super().__getstate__()
-        state["data_mmap"] = None
+        state = copy(self.__dict__)
+        state["binary_header"] = None
+        state["traces_mmap"] = None
         return state
 
     def __setstate__(self, state):
         """ Recreate instance from unpickled state, reopen source SEG-Y file and memmap. """
-        super().__setstate__(state)
-        self.traces_mmap = self._construct_data_mmap()
+        self.__dict__ = state
+        self.binary_header = self.load_binary_header()
+        self.traces_mmap = self._construct_traces_mmap()
 
 
     # Conversion to other SEG-Y formats (data dtype)
@@ -377,7 +386,7 @@ class MemmapLoader(BaseMemmapHandler):
 
         # Exceptions
         traces = self.load_traces([0])
-        if transform(traces).dtype != dst_dtype:
+        if transform(traces).dtype != self.SEGY_FORMAT_TO_TRACE_DATA_DTYPE[format]:
             raise ValueError('dtype of `dst` is not the same as the one returned by `transform`!.'
                              f' {dst_dtype}!={transform(traces).dtype}')
 
@@ -396,7 +405,8 @@ class MemmapLoader(BaseMemmapHandler):
         dst_mmap[3225-1:3225-1+2] = np.array([format], dtype=self.endian_symbol + 'u2').view('u1')
 
         # Prepare dst dtype
-        dst_trace_dtype = np.dtype([('headers', np.void, TraceHeaderSpec.TRACE_HEADER_SIZE),
+        mmap_trace_header_dtype = self._make_mmap_headers_dtype(self.make_headers_specs(list(TraceHeaderSpec.STANDARD_HEADER_TO_BYTE)))
+        dst_trace_dtype = np.dtype([('headers', mmap_trace_header_dtype),
                                     ('data', dst_dtype, self.n_samples)])
 
         # Split the whole file into chunks no larger than `chunk_size`

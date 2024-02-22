@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 
 import segyio
-from .trace_header_spec import TraceHeaderSpec
 from .utils import Notifier
 from .file_handler import BaseFileHandler
 
@@ -151,23 +150,6 @@ class SegyioLoader(BaseFileHandler):
         for i, index in enumerate(indices):
             self.load_trace(index=index, buffer=buffer[i], limits=limits)
         return buffer
-
-    def process_limits(self, limits):
-        """ Convert given `limits` to a `slice`. """
-        if limits is None:
-            return slice(0, self.n_samples, 1)
-        if isinstance(limits, int):
-            limits = slice(limits)
-        elif isinstance(limits, (tuple, list)):
-            limits = slice(*limits)
-
-        # Use .indices to avoid negative slicing range
-        indices = limits.indices(self.n_samples)
-        if indices[-1] < 0:
-            raise ValueError('Negative step is not allowed.')
-        if indices[1] <= indices[0]:
-            raise ValueError('Empty traces after setting limits.')
-        return slice(*indices)
 
     def load_trace(self, index, buffer, limits):
         """ Load one trace into buffer. """

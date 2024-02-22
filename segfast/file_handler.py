@@ -1,7 +1,6 @@
 import numpy as np
-import segyio
 
-from .utils import TraceHeaderSpec
+from .trace_header_spec import TraceHeaderSpec
 
 class BaseFileHandler:
     SEGY_FORMAT_TO_TRACE_DATA_DTYPE = {
@@ -46,7 +45,7 @@ class BaseFileHandler:
         byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
 
         if headers == 'all':
-            return [TraceHeaderSpec(start_byte, byteorder=byteorder)
+            return [TraceHeaderSpec(start_byte=start_byte, byteorder=byteorder)
                     for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
 
         headers_ = []
@@ -71,17 +70,40 @@ class BaseFileHandler:
         dtype = np.int32 if self.n_traces < np.iinfo(np.int32).max else np.int64
         return np.arange(1, self.n_traces + 1, dtype=dtype)
 
-    def postprocess_headers_dataframe(self, dataframe, headers, reconstruct_tsf=True, sort_columns=True):
+    @staticmethod
+    def postprocess_headers_dataframe(dataframe, headers, indices=None, reconstruct_tsf=True, sort_columns=True):
         """ Optionally add TSF header and sort columns of a headers dataframe. """
         if reconstruct_tsf:
-            dataframe['TRACE_SEQUENCE_FILE'] = self.make_tsf_header()
-            headers.append(TraceHeaderSpec('TRACE_SEQUENCE_FILE'))
+            if indices is None:
+                dtype = np.int32 if len(dataframe) < np.iinfo(np.int32).max else np.int64
+                tsf = np.arange(1, len(dataframe) + 1, dtype=dtype)
+            else:
+                tsf = np.array(indices) + 1
+            dataframe['TRACE_SEQUENCE_FILE'] = tsf
+            headers = headers + [TraceHeaderSpec('TRACE_SEQUENCE_FILE')]
 
         if sort_columns:
-            headers_bytes = [item.start_byte for item in headers]
-            columns = np.array([item.name for item in headers])[np.argsort(headers_bytes)]
-            dataframe = dataframe[columns]
-        return dataframe
+            headers_indices = np.argsort([item.start_byte for item in headers])
+            headers = [headers[i] for i in headers_indices]
+            dataframe = dataframe[[header.name for header in headers]]
+        return dataframe, headers
+
+    def process_limits(self, limits):
+        """ Convert given `limits` to a `slice`. """
+        if limits is None:
+            return slice(0, self.n_samples, 1)
+        if isinstance(limits, int):
+            limits = slice(limits)
+        elif isinstance(limits, (tuple, list)):
+            limits = slice(*limits)
+
+        # Use .indices to avoid negative slicing range
+        indices = limits.indices(self.n_samples)
+        if indices[-1] < 0:
+            raise ValueError('Negative step is not allowed.')
+        if indices[1] <= indices[0]:
+            raise ValueError('Empty traces after setting limits.')
+        return slice(*indices)
 
 class BaseMemmapHandler(BaseFileHandler):
     BINARY_HEADER_NAME_TO_BYTE = {
