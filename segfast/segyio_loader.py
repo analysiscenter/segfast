@@ -125,7 +125,7 @@ class SegyioLoader:
 
         Return
         ------
-        pandas.DataFrame
+        ``pandas.DataFrame``
         """
         _ = kwargs
         headers = self.make_headers_specs(headers)

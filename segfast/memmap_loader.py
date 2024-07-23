@@ -188,7 +188,7 @@ class MemmapLoader(SegyioLoader):
         return dataframe
 
     @staticmethod
-    def _make_mmap_headers_dtype(headers, endian_symbol='>'):
+    def _make_mmap_headers_dtype(headers):
         """ Create list of :mod:`numpy` dtypes to view headers data.
 
         Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,
