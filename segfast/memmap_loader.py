@@ -19,6 +19,44 @@ from .utils import Notifier, ForPoolExecutor
 class MemmapLoader(SegyioLoader):
     """ Custom reader/writer for SEG-Y files.
     Relies on memory mapping mechanism for actual reads of headers and traces.
+
+    SEG-Y description
+    -----------------
+    The SEG-Y is a binary file divided into several blocks:
+
+        - file-wide information block which in most cases takes the first 3600 bytes:
+
+            - **textual header**: the first 3200 bytes are reserved for textual info about the file. Most of the
+                software uses this header to keep acquisition meta, date of creation, author, etc.
+            - **binary header**: 3200–3600 bytes contain file-wide headers, which describe the number of traces, format
+                used for storing numbers, the number of samples for each trace, acquisition parameters, etc.
+            - (optional) 3600+ bytes can be used to store the **extended textual information**. If there is
+                such a header, then this is indicated by the value in one of the 3200–3600 bytes.
+
+        - a sequence of traces, where each trace is a combination of its header and signal data:
+
+            - **trace header** takes the first 240 bytes and describes the meta info about its trace: shot/receiver
+                coordinates, the method of acquisition, current trace length, etc. Analogously to binary file header,
+                each trace also can have extended headers.
+            - **trace data** is usually an array of amplitude values, which can be stored in various numerical types.
+                As the original SEG-Y is quite old (1975), one of those numerical formats is IBM float,
+                which is very different from standard IEEE floats; therefore, a special caution is required to
+                correctly decode values from such files.
+
+    For the most part, SEG-Y files are written with constant size of each trace, although the standard itself allows
+    for variable-sized traces. We do not work with such files.
+
+    Implementation details
+    ----------------------
+    We rely on :mod:`segyio` to infer file-wide parameters. For headers and traces, we use custom methods of reading
+    binary data. Main differences to :mod:`segyio` `C++` implementation:
+        - we read all of the requested headers in one file-wide sweep, speeding up by an order of magnitude
+            compared to the :mod:`segyio` sequential read of every requested header.
+            Also, we do that in multiple processes across chunks.
+
+        - a memory map over traces data is used for loading values. Avoiding redundant copies and leveraging
+            :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples axis.
+            This is extra relevant in case of loading horizontal (depth) slices.
     """
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
         # Re-use most of the file-wide attributes from the `segyio` loader
