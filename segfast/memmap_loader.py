@@ -322,7 +322,7 @@ class MemmapLoader(SegyioLoader):
         ----------
         indices : sequence
             Indices (ordinals) of the depth slices to read.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
 
         Return

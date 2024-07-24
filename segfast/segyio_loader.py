@@ -218,7 +218,7 @@ class SegyioLoader:
             Indices (``TRACE_SEQUENCE_FILE``) of the traces to read.
         limits : sequence of ints, slice, optional
             Slice of the data along the depth axis.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
         """
         limits = self.process_limits(limits)
@@ -264,7 +264,7 @@ class SegyioLoader:
         ----------
         indices : sequence
             Indices (ordinals) of the depth slices to read.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
 
         Return
@@ -301,7 +301,7 @@ class SegyioLoader:
             Maximum number of chunks.
         limits : sequence of ints, slice, optional
             Slice of the data along the depth (last) axis. Passed directly to :meth:`.load_traces`.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies. Passed directly to :meth:`.load_traces`.
 
         Return
