@@ -55,8 +55,8 @@ class MemmapLoader(SegyioLoader):
             Also, we do that in multiple processes across chunks.
 
         - a memory map over traces data is used for loading values. Avoiding redundant copies and leveraging
-            :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples axis.
-            This is extra relevant in case of loading horizontal (depth) slices.
+            :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples
+            axis. This is extra relevant in case of loading horizontal (depth) slices.
     """
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
         # Re-use most of the file-wide attributes from the `segyio` loader
