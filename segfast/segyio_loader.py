@@ -14,11 +14,11 @@ from .utils import Notifier
 class SegyioLoader:
     """ A thin wrapper around **segyio** library for convenient loading of headers and traces.
 
-    Most of the methods directly call public API of **segyio**.
+    Most of the methods directly call the public API of **segyio**.
 
-    For trace loading we use private methods and attributes of :class:`segyio.SegyFile`, which allow:
+    For trace loading, we use private methods and attributes of :class:`segyio.SegyFile`, which allow:
 
-       * reading data into pre-defined buffer
+       * reading data into the pre-defined buffer
        * read only parts of the trace
 
     This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,
@@ -36,7 +36,7 @@ class SegyioLoader:
         11: "u2",
         12: "u8",
         16: "u1",
-    } #: :meta hide-value:
+    } #: :meta private:
 
     ENDIANNESS_TO_SYMBOL = {
         "big": ">",
@@ -44,7 +44,7 @@ class SegyioLoader:
 
         "little": "<",
         "lsb": "<",
-    } #: :meta hide-value:
+    } #: :meta private:
 
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
         # Parse arguments for errors
@@ -104,9 +104,9 @@ class SegyioLoader:
             An array-like where each element can be:
                 - ``str`` -- header name,
                 - ``int`` -- header starting byte,
-                - :class:`~.utils.TraceHeaderSpec` -- used as is,
-                - ``tuple`` -- args to init :class:`~.utils.TraceHeaderSpec`,
-                - ``dict`` -- kwargs to init :class:`~.utils.TraceHeaderSpec`.
+                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,
+                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,
+                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.
 
             Note that for :class:`.SegyioLoader` all nonstandard headers byte positions and dtypes will be ignored.
         indices : sequence or None
@@ -120,7 +120,7 @@ class SegyioLoader:
         tracewise : bool
             Whether to iterate over the file in a trace-wise manner, instead of header-wise.
         pbar : bool, str
-            If ``bool``, then whether to display progress bar over the file sweep.
+            If ``bool``, then whether to display the progress bar over the file sweep.
             If ``str``, then type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
 
         Return
@@ -165,7 +165,10 @@ class SegyioLoader:
 
     @staticmethod
     def postprocess_headers_dataframe(dataframe, headers, indices=None, reconstruct_tsf=True, sort_columns=True):
-        """ Optionally add ``'TRACE_SEQUENCE_FILE'`` header and sort columns of a headers dataframe. """
+        """ Optionally add ``'TRACE_SEQUENCE_FILE'`` header and sort columns of a headers dataframe. 
+
+        :meta private:
+        """
         if reconstruct_tsf:
             if indices is None:
                 dtype = np.int32 if len(dataframe) < np.iinfo(np.int32).max else np.int64
@@ -182,7 +185,7 @@ class SegyioLoader:
         return dataframe, headers
 
     def make_headers_specs(self, headers):
-        """ Transform headers list to list of :class:`~.utils.TraceHeaderSpec` instances. """
+        """ Transform headers list to list of :class:`~.trace_header_spec.TraceHeaderSpec` instances. """
         byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
 
         if headers == 'all':
@@ -249,7 +252,7 @@ class SegyioLoader:
         return slice(*indices)
 
     def load_trace(self, index, buffer, limits):
-        """ Load one trace into buffer. """
+        """ Load one trace into the buffer. """
         self.file_handler.xfd.gettr(buffer, index, 1, 1,
                                     limits.start, limits.stop, limits.step,
                                     buffer.size)
@@ -285,7 +288,7 @@ class SegyioLoader:
 
     # Convenience and utility methods
     def make_chunk_iterator(self, chunk_size=None, n_chunks=None, limits=None, buffer=None):
-        """ Create on iterator over the entire file traces in chunks.
+        """ Create an iterator over the entire file traces in chunks.
 
         Each chunk contains no more than ``chunk_size`` traces.
         If ``chunk_size`` is not provided and ``n_chunks`` is given instead, there are no more than ``n_chunks`` chunks.
@@ -359,7 +362,7 @@ class SegyioLoader:
         self.file_handler.close()
 
     def __getstate__(self):
-        """ Create pickling state from ``__dict__`` by setting SEG-Y file handler to ``None``. """
+        """ Create a pickling state from ``__dict__`` by setting SEG-Y file handler to ``None``. """
         state = copy(self.__dict__)
         state["file_handler"] = None
         return state

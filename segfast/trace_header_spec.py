@@ -5,7 +5,7 @@ import segyio
 
 class TraceHeaderSpec:
     """ Trace header class to store its name, byte position and dtype (including endianness). By default, byte position
-    is defined by name accordingly to SEG-Y specification.
+    is defined by name according to SEG-Y specification.
 
     Parameters
     ----------
@@ -81,7 +81,7 @@ class TraceHeaderSpec:
 
     @property
     def standard_name(self):
-        """ The name from specification for header (if ``has_standard_location`` is ``True``). """
+        """ The name from the specification for the header (if ``has_standard_location`` is ``True``). """
         if not self.has_standard_location:
             raise ValueError("The header has non-standard start byte or dtype")
         return self.STANDARD_BYTE_TO_HEADER[self.start_byte]

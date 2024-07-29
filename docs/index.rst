@@ -9,7 +9,7 @@ segfast documentation
 **segfast** is a library for interacting with SEG-Y seismic data. Main features are:
 
 * Faster access to read data: both traces headers and values
-* Optional bufferization, where user can provide a preallocated memory to load the data into
+* Optional bufferization, where the user can provide a preallocated memory to load the data into
 * Convenient API that relies on :class:`numpy.memmap` for most operations, while providing
   `segyio <https://segyio.readthedocs.io/en/latest/>`_ as a fallback engine
 
@@ -25,9 +25,9 @@ Main differences to **segyio** C++ implementation:
      compared to the **segyio** sequential read of every requested header.
      Also, we do that in multiple processes across chunks.
 
-   - a memory map over traces data is used for loading values. Avoiding redundant copies and leveraging
+   - a memory map over trace data is used for loading values. Avoiding redundant copies and leveraging
      :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples axis.
-     This is extra relevant in case of loading horizontal (depth) slices.
+     This is extra relevant in the case of loading horizontal (depth) slices.
 
 
 .. toctree::
