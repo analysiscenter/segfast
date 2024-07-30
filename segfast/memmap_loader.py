@@ -18,44 +18,45 @@ from .utils import Notifier, ForPoolExecutor
 
 class MemmapLoader(SegyioLoader):
     """ Custom reader/writer for SEG-Y files.
-    Relies on memory mapping mechanism for actual reads of headers and traces.
+    Relies on a memory mapping mechanism for actual reads of headers and traces.
 
     SEG-Y description
     -----------------
-    Here we give a brief intro into SEG-Y format. Each SEG-Y file consists of:
-        - file-wide information, in most cases the first 3600 bytes.
-            - the first 3200 bytes are reserved for textual info about the file.
-            Most software uses this to keep track of processing operations, date of creation, author, etc.
-            - 3200-3600 bytes contain file-wide headers, which describe the number of traces,
-            used format, depth, acquisition parameters, etc.
-            - 3600+ bytes can be used to store the extended textual information, which is optional and indicated by
-            one of the values in 3200-3600 bytes.
+    The SEG-Y is a binary file divided into several blocks:
 
-        - a sequence of traces, where each trace is a combination of header and its actual data.
-            - header is the first 240 bytes and it describes the meta info about that trace:
-            its coordinates in different types, the method of acquisition, etc.
-            - data is an array of values, usually amplitudes, which can be stored in multiple numerical types.
-            As the original SEG-Y is quite old (1975), one of those numerical formats is IBM float,
-            which is very different from standard IEEE floats; therefore, a special caution is required to
-            correctly decode values from such files.
+        - file-wide information block which in most cases takes the first 3600 bytes:
 
-    For the most part, SEG-Y files are written with constant size of each trace, although the standard itself allows
+            - **textual header**: the first 3200 bytes are reserved for textual info about the file. Most of the
+              software uses this header to keep acquisition meta, date of creation, author, etc.
+            - **binary header**: 3200–3600 bytes contain file-wide headers, which describe the number of traces,
+              a format used for storing numbers, the number of samples for each trace, acquisition parameters, etc.
+            - (optional) 3600+ bytes can be used to store the **extended textual information**. If there is
+              such a header, then this is indicated by the value in one of the 3200–3600 bytes.
+
+        - a sequence of traces, where each trace is a combination of its header and signal data:
+
+            - **trace header** takes the first 240 bytes and describes the meta info about its trace: shot/receiver
+              coordinates, the method of acquisition, current trace length, etc. Analogously to binary file header,
+              each trace also can have extended headers.
+            - **trace data** is usually an array of amplitude values, which can be stored in various numerical types.
+              As the original SEG-Y is quite old (1975), one of those numerical formats is IBM float,
+              which is very different from standard IEEE floats; therefore, a special caution is required to
+              correctly decode values from such files.
+
+    For the most part, SEG-Y files are written with a constant size of each trace, although the standard itself allows
     for variable-sized traces. We do not work with such files.
-
 
     Implementation details
     ----------------------
-    We rely on `segyio` to infer file-wide parameters.
-
-    For headers and traces, we use custom methods of reading binary data.
-    Main differences to `segyio C++` implementation:
+    We rely on :mod:`segyio` to infer file-wide parameters. For headers and traces, we use custom methods of reading
+    binary data. Main differences to :mod:`segyio` `C++` implementation:
         - we read all of the requested headers in one file-wide sweep, speeding up by an order of magnitude
-        compared to the `segyio` sequential read of every requested header.
-        Also, we do that in multiple processes across chunks.
+          compared to the :mod:`segyio` sequential read of every requested header.
+          Also, we do that in multiple processes across chunks.
 
-        - a memory map over traces data is used for loading values. Avoiding redundant copies and leveraging
-        `numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples axis.
-        This is extra relevant in case of loading horizontal (depth) slices.
+        - a memory map over trace data is used for loading values. Avoiding redundant copies and leveraging
+          :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples
+          axis. This is extra relevant in the case of loading horizontal (depth) slices.
     """
     def __init__(self, path, endian='big', strict=False, ignore_geometry=True):
         # Re-use most of the file-wide attributes from the `segyio` loader
@@ -92,9 +93,9 @@ class MemmapLoader(SegyioLoader):
     def load_headers(self, headers, indices=None, reconstruct_tsf=True, sort_columns=True, return_specs=False,
                      chunk_size=25_000, max_workers=4, pbar=False, **kwargs):
         """ Load requested trace headers from a SEG-Y file for each trace into a dataframe.
-        If needed, we reconstruct the `'TRACE_SEQUENCE_FILE'` manually be re-indexing traces.
+        If needed, we reconstruct the ``'TRACE_SEQUENCE_FILE'`` manually be re-indexing traces.
 
-        Under the hood, we create a memory mapping over the SEG-Y file, and view it with a special dtype.
+        Under the hood, we create a memory mapping over the SEG-Y file, and view it with special dtype.
         That dtype skips all of the trace data bytes and all of the unrequested headers, leaving only passed `headers`
         as non-void dtype.
 
@@ -104,11 +105,11 @@ class MemmapLoader(SegyioLoader):
         ----------
         headers : sequence
             An array-like where each element can be:
-                - str -- header name,
-                - int -- header starting byte,
-                - :class:~`.utils.TraceHeaderSpec` -- used as is,
-                - tuple -- args to init :class:~`.utils.TraceHeaderSpec`,
-                - dict -- kwargs to init :class:~`.utils.TraceHeaderSpec`.
+                - ``str`` -- header name,
+                - ``int`` -- header starting byte,
+                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,
+                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,
+                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.
         indices : sequence or None
             Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.
         reconstruct_tsf : bool
@@ -119,25 +120,50 @@ class MemmapLoader(SegyioLoader):
             Whether to return header specs used to load trace headers.
         chunk_size : int
             Maximum amount of traces in each chunk.
-        max_workers : int or None
-            Maximum number of parallel processes to spawn. If None, then the number of CPU cores is used.
-        pbar : bool, str
+        max_workers : int, optional
+            Maximum number of parallel processes to spawn. If ``None``, then the number of CPU cores is used.
+        pbar : bool or str
             If bool, then whether to display progress bar over the file sweep.
-            If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
+            If str, then type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
+
+        Return
+        ------
+        ``pd.DataFrame``
 
         Examples
         --------
-        Standard 'CDP_X' and 'CDP_Y' headers:
-        >>> segfast_file.load_headers(['CDP_X', 'CDP_Y'])
-        Standard headers from 181 and 185 bytes with standard dtypes:
-        >>> segfast_file.load_headers([181, 185])
-        Load 'CDP_X' and 'CDP_Y' from non-standard bytes positions corresponding to some standard headers (i.e. load
-        'CDP_X' from bytes for 'INLINE_3D' with '<i4' dtype and 'CDP_Y' from bytes for 'CROSSLINE_3D'):
-        >>> segfast_file.load_headers([{'name': 'CDP_X', 'start_byte': 189, 'dtype': '<i4'}, ('CDP_Y', 193)])
-        Load 'CDP_X' and 'CDP_Y' from arbitrary positions:
-        >>> segfast_file.load_headers([('CDP_X', 45, '>f4'), ('CDP_Y', 10, '>f4')])
-        Load 'FieldRecord' header for the first 5 traces:
-        >>> segfast_file.load_headers(['FieldRecord'], indices=np.arange(5))
+        * Standard ``'CDP_X'`` and ``'CDP_Y'`` headers:
+
+        .. code-block:: python
+
+            segfast_file.load_headers(['CDP_X', 'CDP_Y'])
+
+        * Standard headers from 181 and 185 bytes with standard dtypes:
+
+        .. code-block:: python
+
+            segfast_file.load_headers([181, 185])
+
+        * Load ``'CDP_X'`` and ``'CDP_Y'`` from non-standard bytes positions corresponding to some standard headers
+          (i.e. load ``'CDP_X'`` from bytes for ``'INLINE_3D'`` with ``'<i4'`` dtype and ``'CDP_Y'`` from bytes
+          for ``'CROSSLINE_3D'``):
+
+        .. code-block:: python
+
+            segfast_file.load_headers([{'name': 'CDP_X', 'start_byte': 189, 'dtype': '<i4'}, ('CDP_Y', 193)])
+
+        * Load ``'CDP_X'`` and ``'CDP_Y'`` from arbitrary positions:
+
+        .. code-block:: python
+
+            segfast_file.load_headers([('CDP_X', 45, '>f4'), ('CDP_Y', 10, '>f4')])
+
+        * Load 'FieldRecord' header for the first 5 traces:
+
+        .. code-block:: python
+
+            segfast_file.load_headers(['FieldRecord'], indices=np.arange(5))
+
         """
         _ = kwargs
         headers = self.make_headers_specs(headers)
@@ -201,23 +227,28 @@ class MemmapLoader(SegyioLoader):
 
     @staticmethod
     def _make_mmap_headers_dtype(headers):
-        """ Create list of `numpy` dtypes to view headers data.
+        """ Create a  list of :mod:`numpy` dtypes to view headers data.
 
         Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,
-        and the rest of bytes are lumped into `np.void` of certain lengths.
+        and the rest of bytes are lumped into :class:`numpy.void` of certain lengths.
 
-        Only the headers data should be viewed under this dtype: the rest of trace data (values)
+        Only the header data should be viewed under this dtype: the rest of trace data (values)
         should be processed (or skipped) separately.
 
-        We do not apply final conversion to `np.dtype` to the resulting list of dtypes so it is easier to append to it.
+        We do not apply the final conversion to :class:`numpy.dtype` to the resulting list of dtypes so it is easier
+        to append to it.
 
         Examples
         --------
-        if `headers` are `INLINE_3D` and `CROSSLINE_3D`, which are 189-192 and 193-196 bytes, the output would be:
-        >>> [('unused_0', numpy.void, 188),
-        >>>  ('INLINE_3D', '>i4'),
-        >>>  ('CROSSLINE_3D', '>i4'),
-        >>>  ('unused_1', numpy.void, 44)]
+        If ``headers`` are ``'INLINE_3D'`` and ``'CROSSLINE_3D'``, which are 189-192 and 193-196 bytes, the output
+        would be:
+
+        .. code-block:: python
+
+            [('unused_0', numpy.void, 188),
+             ('INLINE_3D', '>i4'),
+             ('CROSSLINE_3D', '>i4'),
+             ('unused_1', numpy.void, 44)]
         """
         headers = sorted(headers, key=lambda x: x.start_byte)
 
@@ -250,18 +281,22 @@ class MemmapLoader(SegyioLoader):
     # Traces loading
     def load_traces(self, indices, limits=None, buffer=None):
         """ Load traces by their indices.
-        Under the hood, we use a pre-made memory mapping over the file, where trace data is viewed with a special dtype.
+        Under the hood, we use pre-made memory mapping over the file, where trace data is viewed with a special dtype.
         Regardless of the numerical dtype of SEG-Y file, we output IEEE float32:
         for IBM floats, that requires an additional conversion.
 
         Parameters
         ----------
         indices : sequence
-            Indices (TRACE_SEQUENCE_FILE) of the traces to read.
+            Indices (``'TRACE_SEQUENCE_FILE'``) of the traces to read.
         limits : sequence of ints, slice, optional
             Slice of the data along the depth axis.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+
+        Return
+        ------
+        numpy.ndarray
         """
         limits = self.process_limits(limits)
 
@@ -281,14 +316,18 @@ class MemmapLoader(SegyioLoader):
 
     def load_depth_slices(self, indices, buffer=None):
         """ Load horizontal (depth) slices of the data.
-        Requires a ~full sweep through SEG-Y, therefore is slow.
+        Requires an almost full sweep through SEG-Y, therefore is slow.
 
         Parameters
         ----------
         indices : sequence
             Indices (ordinals) of the depth slices to read.
-        buffer : np.ndarray, optional
+        buffer : numpy.ndarray, optional
             Buffer to read the data into. If possible, avoids copies.
+
+        Return
+        ------
+        numpy.ndarray
         """
         depth_slices = self.data_mmap[:, indices]
         if self.file_format == 1:
@@ -316,7 +355,7 @@ class MemmapLoader(SegyioLoader):
         return state
 
     def __setstate__(self, state):
-        """ Recreate instance from unpickled state, reopen source SEG-Y file and memmap. """
+        """ Recreate instance from the unpickled state, reopen source SEG-Y file and memmap. """
         super().__setstate__(state)
         self.data_mmap = self._construct_data_mmap()
 
@@ -324,7 +363,7 @@ class MemmapLoader(SegyioLoader):
     # Conversion to other SEG-Y formats (data dtype)
     def convert(self, path=None, format=8, transform=None, chunk_size=25_000, max_workers=4,
                 pbar='t', overwrite=True):
-        """ Convert SEG-Y file to a different `format`: dtype of data values.
+        """ Convert SEG-Y file to a different ``format``: dtype of data values.
         Keeps the same binary header (except for the 3225 byte, which stores the format).
         Keeps the same header values for each trace: essentially, only the values of each trace are transformed.
 
@@ -334,22 +373,26 @@ class MemmapLoader(SegyioLoader):
         Parameters
         ----------
         path : str, optional
-            Path to save file to. If not provided, we use the path of the current cube with an added postfix.
+            Path to the save file to. If not provided, we use the path of the current cube with an added postfix.
         format : int
             Target SEG-Y format.
-            Refer to :attr:`SEGY_FORMAT_TO_TRACE_DATA_DTYPE` for list of available formats and their data value dtype.
+            Refer to :attr:`.SEGY_FORMAT_TO_TRACE_DATA_DTYPE` for list of available formats and their data value dtype.
         transform : callable, optional
-            Callable to transform data from the current file to the ones, saved in `path`.
-            Must return the same dtype, as specified by `format`.
+            Callable to transform data from the current file to the ones, saved in ``path``.
+            Must return the same dtype, as specified by ``format``.
         chunk_size : int
             Maximum amount of traces in each chunk.
         max_workers : int or None
             Maximum number of parallel processes to spawn. If None, then the number of CPU cores is used.
         pbar : bool, str
-            If bool, then whether to display progress bar.
-            If str, then type of progress bar to display: `'t'` for textual, `'n'` for widget.
+            If bool, then whether to display a progress bar.
+            If str, then the type of progress bar to display: ``'t'`` for textual, ``'n'`` for widget.
         overwrite : bool
-            Whether to overwrite existing `path` or raise an exception.
+            Whether to overwrite the existing ``path`` or raise an exception.
+
+        Return
+        ------
+        path : str
         """
         #pylint: disable=redefined-builtin
         # Default path
@@ -433,7 +476,7 @@ def read_chunk(path, shape, offset, mmap_dtype, buffer_dtype, headers, indices):
 
 
 def convert_chunk(src_path, dst_path, shape, offset, src_dtype, dst_dtype, endian, transform, start, chunk_size):
-    """ Copy the headers, transform and write data from one chunk.
+    """ Copy the headers, transform, and write data from one chunk.
     We create all memory mappings anew in each worker, as it is easier and creates no significant overhead.
     """
     # Deserialize `transform`
@@ -465,8 +508,8 @@ def convert_chunk(src_path, dst_path, shape, offset, src_dtype, dst_dtype, endia
 @njit(nogil=True, parallel=True)
 def ibm_to_ieee(hh, hl, lh, ll):
     """ Convert 4 arrays representing individual bytes of IBM 4-byte floats into a single array of floats.
-    Input arrays are ordered from most to least significant bytes and have `np.uint8` dtypes.
-    The result is returned as an `np.float32` array.
+    Input arrays are ordered from most to least significant bytes and have ``numpy.uint8`` dtypes.
+    The result is returned as an ``numpy.float32`` array.
     """
     # pylint: disable=not-an-iterable
     res = np.empty_like(hh, dtype=np.float32)
