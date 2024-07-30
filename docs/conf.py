@@ -6,20 +6,24 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import sys, os
+sys.path.insert(0, os.path.abspath('..'))
+import segfast
+
+master_doc = 'index'
+
 project = 'segfast'
 author = 'Analysis Center'
 copyright = '2024, ' + author
 
-import sys, os
-sys.path.insert(0, os.path.abspath('..'))
-sys.path.append('..')
+release = segfast.__version__
+version = '.'.join(release.split('.'))
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
     'sphinx.ext.autodoc',
-    #'sphinx.ext.autosummary',
     'sphinx.ext.doctest',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
@@ -35,15 +39,14 @@ exclude_patterns = []
 language = 'en'
 
 
-
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-# html_theme = 'alabaster'
+html_title = "SegFast"
 html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
 html_theme_options = {
-    'logo_only': True
+    'logo_only': False
 }
 
 # Example configuration for intersphinx: refer to the Python standard library.
