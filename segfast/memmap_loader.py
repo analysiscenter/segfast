@@ -203,7 +203,7 @@ class MemmapLoader(SegyioLoader):
 
         with Notifier(pbar, total=n_traces) as progress_bar:
             with executor_class(max_workers=max_workers) as executor:
-
+                start = 0
                 def callback(future, start):
                     chunk_headers = future.result()
                     chunk_size = len(chunk_headers)
@@ -214,7 +214,13 @@ class MemmapLoader(SegyioLoader):
                     future = executor.submit(read_chunk, path=self.path, shape=self.n_traces,
                                              offset=self.file_traces_offset, mmap_dtype=mmap_trace_dtype,
                                              buffer_dtype=dst_headers_dtype, headers=headers, indices=chunk_indices)
-                    future.add_done_callback(partial(callback, start=i * chunk_size))
+
+                    future.add_done_callback(partial(callback, start=start))
+
+                    if isinstance(chunk_indices, slice):
+                        start += chunk_size
+                    else:
+                        start += len(chunk_indices)
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, copy=False)
