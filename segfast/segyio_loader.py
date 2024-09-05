@@ -189,7 +189,7 @@ class SegyioLoader:
         byteorder = self.ENDIANNESS_TO_SYMBOL[self.endian]
 
         if headers == 'all':
-            return [TraceHeaderSpec(start_byte, byteorder=byteorder)
+            return [TraceHeaderSpec(start_byte=start_byte, byteorder=byteorder)
                     for start_byte in TraceHeaderSpec.STANDARD_BYTE_TO_HEADER]
 
         headers_ = []

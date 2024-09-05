@@ -180,18 +180,11 @@ class MemmapLoader(SegyioLoader):
         dst_headers_dtype = np.dtype(dst_headers_dtype).newbyteorder("=")
 
         # Calculate the number of requested traces, chunks and a list of trace indices/slices for each chunk
-        if indices is None:
-            n_traces = self.n_traces
-            n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
-            if last_chunk_size:
-                n_chunks += 1
-            chunk_indices_list = [slice(i * chunk_size, (i + 1) * chunk_size) for i in range(n_chunks)]
-        else:
-            n_traces = len(indices)
-            n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
-            if last_chunk_size:
-                n_chunks += 1
-            chunk_indices_list = np.array_split(indices, n_chunks)
+        n_traces = self.n_traces if indices is None else len(indices)
+        n_chunks, last_chunk_size = divmod(n_traces, chunk_size)
+        if last_chunk_size:
+            n_chunks += 1
+        chunk_slices_list = [slice(i * chunk_size, (i + 1) * chunk_size) for i in range(n_chunks)]
 
         # Process `max_workers` and select executor
         max_workers = os.cpu_count() if max_workers is None else max_workers
@@ -203,24 +196,19 @@ class MemmapLoader(SegyioLoader):
 
         with Notifier(pbar, total=n_traces) as progress_bar:
             with executor_class(max_workers=max_workers) as executor:
-                start = 0
                 def callback(future, start):
                     chunk_headers = future.result()
                     chunk_size = len(chunk_headers)
                     buffer[start : start + chunk_size] = chunk_headers
                     progress_bar.update(chunk_size)
 
-                for i, chunk_indices in enumerate(chunk_indices_list):
+                for i, chunk_slice in enumerate(chunk_slices_list):
+                    chunk_indices = indices[chunk_slice] if indices is not None else chunk_slice
                     future = executor.submit(read_chunk, path=self.path, shape=self.n_traces,
                                              offset=self.file_traces_offset, mmap_dtype=mmap_trace_dtype,
                                              buffer_dtype=dst_headers_dtype, headers=headers, indices=chunk_indices)
 
-                    future.add_done_callback(partial(callback, start=start))
-
-                    if isinstance(chunk_indices, slice):
-                        start += chunk_size
-                    else:
-                        start += len(chunk_indices)
+                    future.add_done_callback(partial(callback, start=i * chunk_size))
 
         # Convert to pd.DataFrame, optionally add TSF and sort
         dataframe = pd.DataFrame(buffer, copy=False)
