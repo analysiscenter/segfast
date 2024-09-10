@@ -70,7 +70,7 @@ class TraceHeaderSpec:
     @property
     def is_standard(self):
         """ Whether the header matches the specification. """
-        return self.name in self.STANDARD_BYTE_TO_HEADER and self.has_standard_location
+        return self.name in self.STANDARD_HEADER_TO_BYTE and self.has_standard_location
 
     @property
     def has_standard_location(self):
