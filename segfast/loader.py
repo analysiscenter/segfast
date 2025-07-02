@@ -4,7 +4,7 @@ from .segyio_loader import SegyioLoader
 from .memmap_loader import MemmapLoader
 
 
-def Loader(path, engine='memmap', endian='big', strict=False, ignore_geometry=True):
+def Loader(path, engine='segyio', endian='big', strict=False, ignore_geometry=True):
     """ Selector class for loading SEG-Y with either segyio-based loader or memmap-based one.
 
     Parameters
@@ -27,6 +27,7 @@ def Loader(path, engine='memmap', endian='big', strict=False, ignore_geometry=Tr
     """
     loader_class = _select_loader_class(engine)
     return loader_class(path=path, endian=endian, strict=strict, ignore_geometry=ignore_geometry)
+
 open = File = Loader
 
 
