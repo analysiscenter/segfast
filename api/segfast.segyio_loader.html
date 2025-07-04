@@ -1,0 +1,302 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SegyioLoader &mdash; SegFast</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=fc837d61"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="TraceHeaderSpec" href="segfast.trace_header_spec.html" />
+    <link rel="prev" title="MemmapLoader" href="segfast.memmap_loader.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            segfast
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../start.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../segy.html">SEG-Y description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="segfast.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="segfast.loader.html">Loader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.memmap_loader.html">MemmapLoader</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">SegyioLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.trace_header_spec.html">TraceHeaderSpec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.utils.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">segfast</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="segfast.html">API</a></li>
+      <li class="breadcrumb-item active">SegyioLoader</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/segfast.segyio_loader.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="segyioloader">
+<h1>SegyioLoader<a class="headerlink" href="#segyioloader" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segfast.segyio_loader.</span></span><span class="sig-name descname"><span class="pre">SegyioLoader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">endian</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'big'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader" title="Link to this definition"></a></dt>
+<dd><p>A thin wrapper around <strong>segyio</strong> library for convenient loading of headers and traces.</p>
+<p>Most of the methods directly call the public API of <strong>segyio</strong>.</p>
+<p>For trace loading, we use private methods and attributes of <a class="reference external" href="https://segyio.readthedocs.io/en/latest/segyio.html#segyio.SegyFile" title="(in segyio v1.9.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">segyio.SegyFile</span></code></a>, which allow:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>reading data into the pre-defined buffer</p></li>
+<li><p>read only parts of the trace</p></li>
+</ul>
+</div></blockquote>
+<p>This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,
+and up to 15% over public API in case of loading full lines (inlines or crosslines).</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.sample_interval">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample_interval</span></span><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.sample_interval" title="Link to this definition"></a></dt>
+<dd><p>Sample interval of seismic traces.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.delay">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delay</span></span><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.delay" title="Link to this definition"></a></dt>
+<dd><p>Delay recording time of seismic traces.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_headers">
+<span class="sig-name descname"><span class="pre">load_headers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">headers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reconstruct_tsf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_columns</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_specs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tracewise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pbar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_headers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_headers" title="Link to this definition"></a></dt>
+<dd><p>Load requested trace headers from a SEG-Y file for each trace into a dataframe.
+If needed, we reconstruct the <code class="docutils literal notranslate"><span class="pre">'TRACE_SEQUENCE_FILE'</span></code> manually be re-indexing traces.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>headers</strong> (<em>sequence</em>) – <dl class="simple">
+<dt>An array-like where each element can be:</dt><dd><ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code> – header name,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">int</span></code> – header starting byte,</p></li>
+<li><p><a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a> – used as is,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tuple</span></code> – args to init <a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> – kwargs to init <a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a>.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Note that for <a class="reference internal" href="#segfast.segyio_loader.SegyioLoader" title="segfast.segyio_loader.SegyioLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">SegyioLoader</span></code></a> all nonstandard headers byte positions and dtypes will be ignored.</p>
+</p></li>
+<li><p><strong>indices</strong> (<em>sequence</em><em> or </em><em>None</em>) – Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.</p></li>
+<li><p><strong>reconstruct_tsf</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to reconstruct <code class="docutils literal notranslate"><span class="pre">TRACE_SEQUENCE_FILE</span></code> manually.</p></li>
+<li><p><strong>sort_columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to sort columns in the resulting dataframe by their starting bytes.</p></li>
+<li><p><strong>return_specs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to return header specs used to load trace headers.</p></li>
+<li><p><strong>tracewise</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to iterate over the file in a trace-wise manner, instead of header-wise.</p></li>
+<li><p><strong>pbar</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – If <code class="docutils literal notranslate"><span class="pre">bool</span></code>, then whether to display the progress bar over the file sweep.
+If <code class="docutils literal notranslate"><span class="pre">str</span></code>, then type of progress bar to display: <code class="docutils literal notranslate"><span class="pre">'t'</span></code> for textual, <code class="docutils literal notranslate"><span class="pre">'n'</span></code> for widget.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_header">
+<span class="sig-name descname"><span class="pre">load_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">header</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_header"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_header" title="Link to this definition"></a></dt>
+<dd><p>Load exactly one header.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.make_headers_specs">
+<span class="sig-name descname"><span class="pre">make_headers_specs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">headers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.make_headers_specs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.make_headers_specs" title="Link to this definition"></a></dt>
+<dd><p>Transform headers list to list of <a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a> instances.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_traces">
+<span class="sig-name descname"><span class="pre">load_traces</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_traces"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_traces" title="Link to this definition"></a></dt>
+<dd><p>Load traces by their indices.
+By pre-allocating memory for all of the requested traces, we significantly speed up the process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>sequence</em>) – Indices (<code class="docutils literal notranslate"><span class="pre">TRACE_SEQUENCE_FILE</span></code>) of the traces to read.</p></li>
+<li><p><strong>limits</strong> (<em>sequence</em><em> of </em><em>ints</em><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>optional</em>) – Slice of the data along the depth axis.</p></li>
+<li><p><strong>buffer</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em>, </em><em>optional</em>) – Buffer to read the data into. If possible, avoids copies.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.process_limits">
+<span class="sig-name descname"><span class="pre">process_limits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">limits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.process_limits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.process_limits" title="Link to this definition"></a></dt>
+<dd><p>Convert given <code class="docutils literal notranslate"><span class="pre">limits</span></code> to a <code class="docutils literal notranslate"><span class="pre">slice</span></code> instance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_trace">
+<span class="sig-name descname"><span class="pre">load_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_trace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_trace" title="Link to this definition"></a></dt>
+<dd><p>Load one trace into the buffer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_depth_slices">
+<span class="sig-name descname"><span class="pre">load_depth_slices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_depth_slices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_depth_slices" title="Link to this definition"></a></dt>
+<dd><p>Load horizontal (depth) slices of the data.
+Requires an almost full sweep through SEG-Y, therefore is slow.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>sequence</em>) – Indices (ordinals) of the depth slices to read.</p></li>
+<li><p><strong>buffer</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em>, </em><em>optional</em>) – Buffer to read the data into. If possible, avoids copies.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.load_depth_slice">
+<span class="sig-name descname"><span class="pre">load_depth_slice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.load_depth_slice"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.load_depth_slice" title="Link to this definition"></a></dt>
+<dd><p>Load one depth slice into buffer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.make_chunk_iterator">
+<span class="sig-name descname"><span class="pre">make_chunk_iterator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_chunks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.make_chunk_iterator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.make_chunk_iterator" title="Link to this definition"></a></dt>
+<dd><p>Create an iterator over the entire file traces in chunks.</p>
+<p>Each chunk contains no more than <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> traces.
+If <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> is not provided and <code class="docutils literal notranslate"><span class="pre">n_chunks</span></code> is given instead, there are no more than <code class="docutils literal notranslate"><span class="pre">n_chunks</span></code> chunks.
+One and only one of <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> and <code class="docutils literal notranslate"><span class="pre">n_chunks</span></code> should be provided.</p>
+<p>Each element in the iterator is a dictionary with <code class="docutils literal notranslate"><span class="pre">'data'</span></code>, <code class="docutils literal notranslate"><span class="pre">'start'</span></code> and <code class="docutils literal notranslate"><span class="pre">'end'</span></code> keys.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – Maximum size of the chunk.</p></li>
+<li><p><strong>n_chunks</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – Maximum number of chunks.</p></li>
+<li><p><strong>limits</strong> (<em>sequence</em><em> of </em><em>ints</em><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>optional</em>) – Slice of the data along the depth (last) axis. Passed directly to <a class="reference internal" href="#segfast.segyio_loader.SegyioLoader.load_traces" title="segfast.segyio_loader.SegyioLoader.load_traces"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_traces()</span></code></a>.</p></li>
+<li><p><strong>buffer</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em>, </em><em>optional</em>) – Buffer to read the data into. If possible, avoids copies. Passed directly to <a class="reference internal" href="#segfast.segyio_loader.SegyioLoader.load_traces" title="segfast.segyio_loader.SegyioLoader.load_traces"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_traces()</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>iterator, info</strong> (<em>tuple with two elements</em>)</p></li>
+<li><p><strong>iterator</strong> (<em>iterable</em>) – An iterator over the entire SEG-Y traces.
+Each element in the iterator is a dictionary with <code class="docutils literal notranslate"><span class="pre">'data'</span></code>, <code class="docutils literal notranslate"><span class="pre">'start'</span></code> and <code class="docutils literal notranslate"><span class="pre">'end'</span></code> keys.</p></li>
+<li><p><strong>info</strong> (<em>dict</em>) – Description of the iterator with <code class="docutils literal notranslate"><span class="pre">'chunk_size'</span></code>, <code class="docutils literal notranslate"><span class="pre">'n_chunks'</span></code>, <code class="docutils literal notranslate"><span class="pre">'chunk_starts'</span></code> and <code class="docutils literal notranslate"><span class="pre">'chunk_ends'</span></code>
+keys.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SegyioLoader.chunk_iterator">
+<span class="sig-name descname"><span class="pre">chunk_iterator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_chunks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SegyioLoader.chunk_iterator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SegyioLoader.chunk_iterator" title="Link to this definition"></a></dt>
+<dd><p>A shorthand for <a class="reference internal" href="#segfast.segyio_loader.SegyioLoader.make_chunk_iterator" title="segfast.segyio_loader.SegyioLoader.make_chunk_iterator"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_chunk_iterator()</span></code></a> with no info returned.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SafeSegyioLoader">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segfast.segyio_loader.</span></span><span class="sig-name descname"><span class="pre">SafeSegyioLoader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">endian</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'big'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SafeSegyioLoader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SafeSegyioLoader" title="Link to this definition"></a></dt>
+<dd><p>A thin wrapper around <strong>segyio</strong> library for convenient loading of headers and traces.</p>
+<p>Unlike <a class="reference internal" href="#segfast.segyio_loader.SegyioLoader" title="segfast.segyio_loader.SegyioLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">SegyioLoader</span></code></a>, uses only public APIs to load traces.</p>
+<p>Used mainly for performance measurements.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SafeSegyioLoader.load_trace">
+<span class="sig-name descname"><span class="pre">load_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SafeSegyioLoader.load_trace"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SafeSegyioLoader.load_trace" title="Link to this definition"></a></dt>
+<dd><p>Load one trace into buffer.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.segyio_loader.SafeSegyioLoader.load_depth_slice">
+<span class="sig-name descname"><span class="pre">load_depth_slice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/segyio_loader.html#SafeSegyioLoader.load_depth_slice"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.segyio_loader.SafeSegyioLoader.load_depth_slice" title="Link to this definition"></a></dt>
+<dd><p>Load one depth slice into buffer.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="segfast.memmap_loader.html" class="btn btn-neutral float-left" title="MemmapLoader" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="segfast.trace_header_spec.html" class="btn btn-neutral float-right" title="TraceHeaderSpec" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Analysis Center.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

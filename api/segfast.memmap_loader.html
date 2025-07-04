@@ -1,0 +1,319 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MemmapLoader &mdash; SegFast</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=fc837d61"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="SegyioLoader" href="segfast.segyio_loader.html" />
+    <link rel="prev" title="Loader" href="segfast.loader.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            segfast
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../start.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../segy.html">SEG-Y description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="segfast.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="segfast.loader.html">Loader</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">MemmapLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.segyio_loader.html">SegyioLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.trace_header_spec.html">TraceHeaderSpec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="segfast.utils.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">segfast</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="segfast.html">API</a></li>
+      <li class="breadcrumb-item active">MemmapLoader</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/segfast.memmap_loader.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="memmaploader">
+<h1>MemmapLoader<a class="headerlink" href="#memmaploader" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="segfast.memmap_loader.MemmapLoader">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segfast.memmap_loader.</span></span><span class="sig-name descname"><span class="pre">MemmapLoader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">endian</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'big'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/memmap_loader.html#MemmapLoader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.memmap_loader.MemmapLoader" title="Link to this definition"></a></dt>
+<dd><p>Custom reader/writer for SEG-Y files.
+Relies on a memory mapping mechanism for actual reads of headers and traces.</p>
+<section id="seg-y-description">
+<h2>SEG-Y description<a class="headerlink" href="#seg-y-description" title="Link to this heading"></a></h2>
+<p>The SEG-Y is a binary file divided into several blocks:</p>
+<blockquote>
+<div><ul>
+<li><p>file-wide information block which in most cases takes the first 3600 bytes:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>textual header</strong>: the first 3200 bytes are reserved for textual info about the file. Most of the
+software uses this header to keep acquisition meta, date of creation, author, etc.</p></li>
+<li><p><strong>binary header</strong>: 3200–3600 bytes contain file-wide headers, which describe the number of traces,
+a format used for storing numbers, the number of samples for each trace, acquisition parameters, etc.</p></li>
+<li><p>(optional) 3600+ bytes can be used to store the <strong>extended textual information</strong>. If there is
+such a header, then this is indicated by the value in one of the 3200–3600 bytes.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>a sequence of traces, where each trace is a combination of its header and signal data:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>trace header</strong> takes the first 240 bytes and describes the meta info about its trace: shot/receiver
+coordinates, the method of acquisition, current trace length, etc. Analogously to binary file header,
+each trace also can have extended headers.</p></li>
+<li><p><strong>trace data</strong> is usually an array of amplitude values, which can be stored in various numerical types.
+As the original SEG-Y is quite old (1975), one of those numerical formats is IBM float,
+which is very different from standard IEEE floats; therefore, a special caution is required to
+correctly decode values from such files.</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+<p>For the most part, SEG-Y files are written with a constant size of each trace, although the standard itself allows
+for variable-sized traces. We do not work with such files.</p>
+</section>
+<section id="implementation-details">
+<h2>Implementation details<a class="headerlink" href="#implementation-details" title="Link to this heading"></a></h2>
+<p>We rely on <code class="xref py py-mod docutils literal notranslate"><span class="pre">segyio</span></code> to infer file-wide parameters. For headers and traces, we use custom methods of reading
+binary data. Main differences to <code class="xref py py-mod docutils literal notranslate"><span class="pre">segyio</span></code> <cite>C++</cite> implementation:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>we read all of the requested headers in one file-wide sweep, speeding up by an order of magnitude
+compared to the <code class="xref py py-mod docutils literal notranslate"><span class="pre">segyio</span></code> sequential read of every requested header.
+Also, we do that in multiple processes across chunks.</p></li>
+<li><p>a memory map over trace data is used for loading values. Avoiding redundant copies and leveraging
+<a class="reference external" href="https://numpy.org/doc/stable/reference/index.html#module-numpy" title="(in NumPy v2.3)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">numpy</span></code></a> superiority allows to speed up reading, especially in case of trace slicing along the samples
+axis. This is extra relevant in the case of loading horizontal (depth) slices.</p></li>
+</ul>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.memmap_loader.MemmapLoader.load_headers">
+<span class="sig-name descname"><span class="pre">load_headers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">headers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reconstruct_tsf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_columns</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_specs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pbar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/memmap_loader.html#MemmapLoader.load_headers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.memmap_loader.MemmapLoader.load_headers" title="Link to this definition"></a></dt>
+<dd><p>Load requested trace headers from a SEG-Y file for each trace into a dataframe.
+If needed, we reconstruct the <code class="docutils literal notranslate"><span class="pre">'TRACE_SEQUENCE_FILE'</span></code> manually be re-indexing traces.</p>
+<p>Under the hood, we create a memory mapping over the SEG-Y file, and view it with special dtype.
+That dtype skips all of the trace data bytes and all of the unrequested headers, leaving only passed <cite>headers</cite>
+as non-void dtype.</p>
+<p>The file is read in chunks in multiple processes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>headers</strong> (<em>sequence</em>) – <dl class="simple">
+<dt>An array-like where each element can be:</dt><dd><ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code> – header name,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">int</span></code> – header starting byte,</p></li>
+<li><p><a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a> – used as is,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tuple</span></code> – args to init <a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> – kwargs to init <a class="reference internal" href="segfast.trace_header_spec.html#segfast.trace_header_spec.TraceHeaderSpec" title="segfast.trace_header_spec.TraceHeaderSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TraceHeaderSpec</span></code></a>.</p></li>
+</ul>
+</dd>
+</dl>
+</p></li>
+<li><p><strong>indices</strong> (<em>sequence</em><em> or </em><em>None</em>) – Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.</p></li>
+<li><p><strong>reconstruct_tsf</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to reconstruct <cite>TRACE_SEQUENCE_FILE</cite> manually.</p></li>
+<li><p><strong>sort_columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to sort columns in the resulting dataframe by their starting bytes.</p></li>
+<li><p><strong>return_specs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to return header specs used to load trace headers.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>) – Maximum amount of traces in each chunk.</p></li>
+<li><p><strong>max_workers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>optional</em>) – Maximum number of parallel processes to spawn. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, then the number of CPU cores is used.</p></li>
+<li><p><strong>pbar</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – If bool, then whether to display progress bar over the file sweep.
+If str, then type of progress bar to display: <code class="docutils literal notranslate"><span class="pre">'t'</span></code> for textual, <code class="docutils literal notranslate"><span class="pre">'n'</span></code> for widget.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">pd.DataFrame</span></code></p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<ul class="simple">
+<li><p>Standard <code class="docutils literal notranslate"><span class="pre">'CDP_X'</span></code> and <code class="docutils literal notranslate"><span class="pre">'CDP_Y'</span></code> headers:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">segfast_file</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([</span><span class="s1">&#39;CDP_X&#39;</span><span class="p">,</span> <span class="s1">&#39;CDP_Y&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Standard headers from 181 and 185 bytes with standard dtypes:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">segfast_file</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([</span><span class="mi">181</span><span class="p">,</span> <span class="mi">185</span><span class="p">])</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Load <code class="docutils literal notranslate"><span class="pre">'CDP_X'</span></code> and <code class="docutils literal notranslate"><span class="pre">'CDP_Y'</span></code> from non-standard bytes positions corresponding to some standard headers
+(i.e. load <code class="docutils literal notranslate"><span class="pre">'CDP_X'</span></code> from bytes for <code class="docutils literal notranslate"><span class="pre">'INLINE_3D'</span></code> with <code class="docutils literal notranslate"><span class="pre">'&lt;i4'</span></code> dtype and <code class="docutils literal notranslate"><span class="pre">'CDP_Y'</span></code> from bytes
+for <code class="docutils literal notranslate"><span class="pre">'CROSSLINE_3D'</span></code>):</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">segfast_file</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;CDP_X&#39;</span><span class="p">,</span> <span class="s1">&#39;start_byte&#39;</span><span class="p">:</span> <span class="mi">189</span><span class="p">,</span> <span class="s1">&#39;dtype&#39;</span><span class="p">:</span> <span class="s1">&#39;&lt;i4&#39;</span><span class="p">},</span> <span class="p">(</span><span class="s1">&#39;CDP_Y&#39;</span><span class="p">,</span> <span class="mi">193</span><span class="p">)])</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Load <code class="docutils literal notranslate"><span class="pre">'CDP_X'</span></code> and <code class="docutils literal notranslate"><span class="pre">'CDP_Y'</span></code> from arbitrary positions:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">segfast_file</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([(</span><span class="s1">&#39;CDP_X&#39;</span><span class="p">,</span> <span class="mi">45</span><span class="p">,</span> <span class="s1">&#39;&gt;f4&#39;</span><span class="p">),</span> <span class="p">(</span><span class="s1">&#39;CDP_Y&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="s1">&#39;&gt;f4&#39;</span><span class="p">)])</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Load ‘FieldRecord’ header for the first 5 traces:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">segfast_file</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([</span><span class="s1">&#39;FieldRecord&#39;</span><span class="p">],</span> <span class="n">indices</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.memmap_loader.MemmapLoader.load_traces">
+<span class="sig-name descname"><span class="pre">load_traces</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limits</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/memmap_loader.html#MemmapLoader.load_traces"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.memmap_loader.MemmapLoader.load_traces" title="Link to this definition"></a></dt>
+<dd><p>Load traces by their indices.
+Under the hood, we use pre-made memory mapping over the file, where trace data is viewed with a special dtype.
+Regardless of the numerical dtype of SEG-Y file, we output IEEE float32:
+for IBM floats, that requires an additional conversion.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>sequence</em>) – Indices (<code class="docutils literal notranslate"><span class="pre">'TRACE_SEQUENCE_FILE'</span></code>) of the traces to read.</p></li>
+<li><p><strong>limits</strong> (<em>sequence</em><em> of </em><em>ints</em><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>optional</em>) – Slice of the data along the depth axis.</p></li>
+<li><p><strong>buffer</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em>, </em><em>optional</em>) – Buffer to read the data into. If possible, avoids copies.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.memmap_loader.MemmapLoader.load_depth_slices">
+<span class="sig-name descname"><span class="pre">load_depth_slices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/memmap_loader.html#MemmapLoader.load_depth_slices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.memmap_loader.MemmapLoader.load_depth_slices" title="Link to this definition"></a></dt>
+<dd><p>Load horizontal (depth) slices of the data.
+Requires an almost full sweep through SEG-Y, therefore is slow.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>sequence</em>) – Indices (ordinals) of the depth slices to read.</p></li>
+<li><p><strong>buffer</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em>, </em><em>optional</em>) – Buffer to read the data into. If possible, avoids copies.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segfast.memmap_loader.MemmapLoader.convert">
+<span class="sig-name descname"><span class="pre">convert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pbar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'t'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/segfast/memmap_loader.html#MemmapLoader.convert"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#segfast.memmap_loader.MemmapLoader.convert" title="Link to this definition"></a></dt>
+<dd><p>Convert SEG-Y file to a different <code class="docutils literal notranslate"><span class="pre">format</span></code>: dtype of data values.
+Keeps the same binary header (except for the 3225 byte, which stores the format).
+Keeps the same header values for each trace: essentially, only the values of each trace are transformed.</p>
+<p>The most common scenario of this function usage is to convert float32 SEG-Y into int8 one:
+the latter is a lot faster and takes ~4 times less disk space at the cost of some data loss.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path to the save file to. If not provided, we use the path of the current cube with an added postfix.</p></li>
+<li><p><strong>format</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>) – Target SEG-Y format.
+Refer to <code class="xref py py-attr docutils literal notranslate"><span class="pre">SEGY_FORMAT_TO_TRACE_DATA_DTYPE</span></code> for list of available formats and their data value dtype.</p></li>
+<li><p><strong>transform</strong> (<em>callable</em><em>, </em><em>optional</em>) – Callable to transform data from the current file to the ones, saved in <code class="docutils literal notranslate"><span class="pre">path</span></code>.
+Must return the same dtype, as specified by <code class="docutils literal notranslate"><span class="pre">format</span></code>.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>) – Maximum amount of traces in each chunk.</p></li>
+<li><p><strong>max_workers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>None</em>) – Maximum number of parallel processes to spawn. If None, then the number of CPU cores is used.</p></li>
+<li><p><strong>pbar</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>) – If bool, then whether to display a progress bar.
+If str, then the type of progress bar to display: <code class="docutils literal notranslate"><span class="pre">'t'</span></code> for textual, <code class="docutils literal notranslate"><span class="pre">'n'</span></code> for widget.</p></li>
+<li><p><strong>overwrite</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>) – Whether to overwrite the existing <code class="docutils literal notranslate"><span class="pre">path</span></code> or raise an exception.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>path</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="segfast.loader.html" class="btn btn-neutral float-left" title="Loader" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="segfast.segyio_loader.html" class="btn btn-neutral float-right" title="SegyioLoader" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Analysis Center.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,635 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>segfast.memmap_loader &mdash; SegFast</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            segfast
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../start.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../segy.html">SEG-Y description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/segfast.html">API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">segfast</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">segfast.memmap_loader</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for segfast.memmap_loader</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot; Class to load headers/traces from SEG-Y via memory mapping. &quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessPoolExecutor</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dill</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numba</span><span class="w"> </span><span class="kn">import</span> <span class="n">njit</span><span class="p">,</span> <span class="n">prange</span>
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.segyio_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">SegyioLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.trace_header_spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">TraceHeaderSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Notifier</span><span class="p">,</span> <span class="n">ForPoolExecutor</span>
+
+
+
+<div class="viewcode-block" id="MemmapLoader">
+<a class="viewcode-back" href="../../api/segfast.memmap_loader.html#segfast.memmap_loader.MemmapLoader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MemmapLoader</span><span class="p">(</span><span class="n">SegyioLoader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Custom reader/writer for SEG-Y files.</span>
+<span class="sd">    Relies on a memory mapping mechanism for actual reads of headers and traces.</span>
+
+<span class="sd">    SEG-Y description</span>
+<span class="sd">    -----------------</span>
+<span class="sd">    The SEG-Y is a binary file divided into several blocks:</span>
+
+<span class="sd">        - file-wide information block which in most cases takes the first 3600 bytes:</span>
+
+<span class="sd">            - **textual header**: the first 3200 bytes are reserved for textual info about the file. Most of the</span>
+<span class="sd">              software uses this header to keep acquisition meta, date of creation, author, etc.</span>
+<span class="sd">            - **binary header**: 3200–3600 bytes contain file-wide headers, which describe the number of traces,</span>
+<span class="sd">              a format used for storing numbers, the number of samples for each trace, acquisition parameters, etc.</span>
+<span class="sd">            - (optional) 3600+ bytes can be used to store the **extended textual information**. If there is</span>
+<span class="sd">              such a header, then this is indicated by the value in one of the 3200–3600 bytes.</span>
+
+<span class="sd">        - a sequence of traces, where each trace is a combination of its header and signal data:</span>
+
+<span class="sd">            - **trace header** takes the first 240 bytes and describes the meta info about its trace: shot/receiver</span>
+<span class="sd">              coordinates, the method of acquisition, current trace length, etc. Analogously to binary file header,</span>
+<span class="sd">              each trace also can have extended headers.</span>
+<span class="sd">            - **trace data** is usually an array of amplitude values, which can be stored in various numerical types.</span>
+<span class="sd">              As the original SEG-Y is quite old (1975), one of those numerical formats is IBM float,</span>
+<span class="sd">              which is very different from standard IEEE floats; therefore, a special caution is required to</span>
+<span class="sd">              correctly decode values from such files.</span>
+
+<span class="sd">    For the most part, SEG-Y files are written with a constant size of each trace, although the standard itself allows</span>
+<span class="sd">    for variable-sized traces. We do not work with such files.</span>
+
+<span class="sd">    Implementation details</span>
+<span class="sd">    ----------------------</span>
+<span class="sd">    We rely on :mod:`segyio` to infer file-wide parameters. For headers and traces, we use custom methods of reading</span>
+<span class="sd">    binary data. Main differences to :mod:`segyio` `C++` implementation:</span>
+<span class="sd">        - we read all of the requested headers in one file-wide sweep, speeding up by an order of magnitude</span>
+<span class="sd">          compared to the :mod:`segyio` sequential read of every requested header.</span>
+<span class="sd">          Also, we do that in multiple processes across chunks.</span>
+
+<span class="sd">        - a memory map over trace data is used for loading values. Avoiding redundant copies and leveraging</span>
+<span class="sd">          :mod:`numpy` superiority allows to speed up reading, especially in case of trace slicing along the samples</span>
+<span class="sd">          axis. This is extra relevant in the case of loading horizontal (depth) slices.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">endian</span><span class="o">=</span><span class="s1">&#39;big&#39;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="c1"># Re-use most of the file-wide attributes from the `segyio` loader</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">endian</span><span class="o">=</span><span class="n">endian</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">ignore_geometry</span><span class="o">=</span><span class="n">ignore_geometry</span><span class="p">)</span>
+
+        <span class="c1"># Endian symbol for creating `numpy` dtypes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endian_symbol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENDIANNESS_TO_SYMBOL</span><span class="p">[</span><span class="n">endian</span><span class="p">]</span>
+
+        <span class="c1"># Prefix attributes with `file`/`mmap` to avoid confusion.</span>
+        <span class="c1"># TODO: maybe, add `segy` prefix to the attributes of the base class?</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;format&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;trace0&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_trace_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;trace_bsize&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Dtype for data of each trace</span>
+        <span class="n">mmap_trace_data_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">SEGY_FORMAT_TO_TRACE_DATA_DTYPE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">file_format</span><span class="p">]</span>
+        <span class="n">mmap_trace_data_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">endian_symbol</span> <span class="o">+</span> <span class="n">mmap_trace_data_dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_dtype</span> <span class="o">=</span> <span class="n">mmap_trace_data_dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_format</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">else</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+        <span class="c1"># Dtype of each trace</span>
+        <span class="c1"># TODO: maybe, use `np.uint8` as dtype instead of `np.void` for headers as it has nicer repr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">([(</span><span class="s1">&#39;headers&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">void</span><span class="p">,</span> <span class="n">TraceHeaderSpec</span><span class="o">.</span><span class="n">TRACE_HEADER_SIZE</span><span class="p">),</span>
+                                          <span class="p">(</span><span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_dtype</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_size</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_mmap</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_data_mmap</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_construct_data_mmap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Create a memory map with the first 240 bytes (headers) of each trace skipped. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_dtype</span><span class="p">,</span>
+                         <span class="n">offset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span><span class="p">)[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+
+
+    <span class="c1"># Headers loading</span>
+<div class="viewcode-block" id="MemmapLoader.load_headers">
+<a class="viewcode-back" href="../../api/segfast.memmap_loader.html#segfast.memmap_loader.MemmapLoader.load_headers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sort_columns</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_specs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                     <span class="n">chunk_size</span><span class="o">=</span><span class="mi">25_000</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load requested trace headers from a SEG-Y file for each trace into a dataframe.</span>
+<span class="sd">        If needed, we reconstruct the ``&#39;TRACE_SEQUENCE_FILE&#39;`` manually be re-indexing traces.</span>
+
+<span class="sd">        Under the hood, we create a memory mapping over the SEG-Y file, and view it with special dtype.</span>
+<span class="sd">        That dtype skips all of the trace data bytes and all of the unrequested headers, leaving only passed `headers`</span>
+<span class="sd">        as non-void dtype.</span>
+
+<span class="sd">        The file is read in chunks in multiple processes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        headers : sequence</span>
+<span class="sd">            An array-like where each element can be:</span>
+<span class="sd">                - ``str`` -- header name,</span>
+<span class="sd">                - ``int`` -- header starting byte,</span>
+<span class="sd">                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,</span>
+<span class="sd">                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,</span>
+<span class="sd">                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.</span>
+<span class="sd">        indices : sequence or None</span>
+<span class="sd">            Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.</span>
+<span class="sd">        reconstruct_tsf : bool</span>
+<span class="sd">            Whether to reconstruct `TRACE_SEQUENCE_FILE` manually.</span>
+<span class="sd">        sort_columns : bool</span>
+<span class="sd">            Whether to sort columns in the resulting dataframe by their starting bytes.</span>
+<span class="sd">        return_specs : bool</span>
+<span class="sd">            Whether to return header specs used to load trace headers.</span>
+<span class="sd">        chunk_size : int</span>
+<span class="sd">            Maximum amount of traces in each chunk.</span>
+<span class="sd">        max_workers : int, optional</span>
+<span class="sd">            Maximum number of parallel processes to spawn. If ``None``, then the number of CPU cores is used.</span>
+<span class="sd">        pbar : bool or str</span>
+<span class="sd">            If bool, then whether to display progress bar over the file sweep.</span>
+<span class="sd">            If str, then type of progress bar to display: ``&#39;t&#39;`` for textual, ``&#39;n&#39;`` for widget.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        ``pd.DataFrame``</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        * Standard ``&#39;CDP_X&#39;`` and ``&#39;CDP_Y&#39;`` headers:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            segfast_file.load_headers([&#39;CDP_X&#39;, &#39;CDP_Y&#39;])</span>
+
+<span class="sd">        * Standard headers from 181 and 185 bytes with standard dtypes:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            segfast_file.load_headers([181, 185])</span>
+
+<span class="sd">        * Load ``&#39;CDP_X&#39;`` and ``&#39;CDP_Y&#39;`` from non-standard bytes positions corresponding to some standard headers</span>
+<span class="sd">          (i.e. load ``&#39;CDP_X&#39;`` from bytes for ``&#39;INLINE_3D&#39;`` with ``&#39;&lt;i4&#39;`` dtype and ``&#39;CDP_Y&#39;`` from bytes</span>
+<span class="sd">          for ``&#39;CROSSLINE_3D&#39;``):</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            segfast_file.load_headers([{&#39;name&#39;: &#39;CDP_X&#39;, &#39;start_byte&#39;: 189, &#39;dtype&#39;: &#39;&lt;i4&#39;}, (&#39;CDP_Y&#39;, 193)])</span>
+
+<span class="sd">        * Load ``&#39;CDP_X&#39;`` and ``&#39;CDP_Y&#39;`` from arbitrary positions:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            segfast_file.load_headers([(&#39;CDP_X&#39;, 45, &#39;&gt;f4&#39;), (&#39;CDP_Y&#39;, 10, &#39;&gt;f4&#39;)])</span>
+
+<span class="sd">        * Load &#39;FieldRecord&#39; header for the first 5 traces:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            segfast_file.load_headers([&#39;FieldRecord&#39;], indices=np.arange(5))</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">kwargs</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_headers_specs</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reconstruct_tsf</span><span class="p">:</span>
+            <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span> <span class="k">if</span> <span class="n">header</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s1">&#39;TRACE_SEQUENCE_FILE&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Construct mmap dtype: detailed for headers</span>
+        <span class="n">mmap_trace_headers_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_mmap_headers_dtype</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+        <span class="n">mmap_trace_dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">([</span><span class="o">*</span><span class="n">mmap_trace_headers_dtype</span><span class="p">,</span>
+                                     <span class="p">(</span><span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_dtype</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_data_size</span><span class="p">)])</span>
+
+        <span class="n">dst_headers_dtype</span> <span class="o">=</span> <span class="p">[(</span><span class="n">header</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">header</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">]</span>
+        <span class="n">dst_headers_dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="n">dst_headers_dtype</span><span class="p">)</span><span class="o">.</span><span class="n">newbyteorder</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Calculate the number of requested traces, chunks and a list of trace indices/slices for each chunk</span>
+        <span class="n">n_traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span> <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">n_chunks</span><span class="p">,</span> <span class="n">last_chunk_size</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">last_chunk_size</span><span class="p">:</span>
+            <span class="n">n_chunks</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">chunk_slices_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">chunk_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_chunks</span><span class="p">)]</span>
+
+        <span class="c1"># Process `max_workers` and select executor</span>
+        <span class="n">max_workers</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="k">if</span> <span class="n">max_workers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">max_workers</span>
+        <span class="n">max_workers</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_chunks</span><span class="p">,</span> <span class="n">max_workers</span><span class="p">)</span>
+        <span class="n">executor_class</span> <span class="o">=</span> <span class="n">ForPoolExecutor</span> <span class="k">if</span> <span class="n">max_workers</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">ProcessPoolExecutor</span>
+
+        <span class="c1"># Iterate over chunks</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dst_headers_dtype</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">Notifier</span><span class="p">(</span><span class="n">pbar</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">n_traces</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress_bar</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">executor_class</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="n">future</span><span class="p">,</span> <span class="n">start</span><span class="p">):</span>
+                    <span class="n">chunk_headers</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+                    <span class="n">chunk_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk_headers</span><span class="p">)</span>
+                    <span class="n">buffer</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">]</span> <span class="o">=</span> <span class="n">chunk_headers</span>
+                    <span class="n">progress_bar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk_size</span><span class="p">)</span>
+
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">chunk_slice</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chunk_slices_list</span><span class="p">):</span>
+                    <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">chunk_slice</span><span class="p">]</span> <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">chunk_slice</span>
+                    <span class="n">future</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">read_chunk</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span>
+                                             <span class="n">offset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span><span class="p">,</span> <span class="n">mmap_dtype</span><span class="o">=</span><span class="n">mmap_trace_dtype</span><span class="p">,</span>
+                                             <span class="n">buffer_dtype</span><span class="o">=</span><span class="n">dst_headers_dtype</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="n">chunk_indices</span><span class="p">)</span>
+
+                    <span class="n">future</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">partial</span><span class="p">(</span><span class="n">callback</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="n">i</span> <span class="o">*</span> <span class="n">chunk_size</span><span class="p">))</span>
+
+        <span class="c1"># Convert to pd.DataFrame, optionally add TSF and sort</span>
+        <span class="n">dataframe</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocess_headers_dataframe</span><span class="p">(</span><span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">,</span>
+                                                                <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="n">reconstruct_tsf</span><span class="p">,</span>
+                                                                <span class="n">sort_columns</span><span class="o">=</span><span class="n">sort_columns</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_specs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span>
+        <span class="k">return</span> <span class="n">dataframe</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_mmap_headers_dtype</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Create a  list of :mod:`numpy` dtypes to view headers data.</span>
+
+<span class="sd">        Defines a dtype for exactly 240 bytes, where each of the requested headers would have its own named subdtype,</span>
+<span class="sd">        and the rest of bytes are lumped into :class:`numpy.void` of certain lengths.</span>
+
+<span class="sd">        Only the header data should be viewed under this dtype: the rest of trace data (values)</span>
+<span class="sd">        should be processed (or skipped) separately.</span>
+
+<span class="sd">        We do not apply the final conversion to :class:`numpy.dtype` to the resulting list of dtypes so it is easier</span>
+<span class="sd">        to append to it.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        If ``headers`` are ``&#39;INLINE_3D&#39;`` and ``&#39;CROSSLINE_3D&#39;``, which are 189-192 and 193-196 bytes, the output</span>
+<span class="sd">        would be:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [(&#39;unused_0&#39;, numpy.void, 188),</span>
+<span class="sd">             (&#39;INLINE_3D&#39;, &#39;&gt;i4&#39;),</span>
+<span class="sd">             (&#39;CROSSLINE_3D&#39;, &#39;&gt;i4&#39;),</span>
+<span class="sd">             (&#39;unused_1&#39;, numpy.void, 44)]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">headers</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">start_byte</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">headers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">start_byte</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dtype_list</span> <span class="o">=</span> <span class="p">[(</span><span class="s1">&#39;unused_0&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">void</span><span class="p">,</span> <span class="n">headers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">start_byte</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+            <span class="n">unused_counter</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dtype_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">unused_counter</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">header</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span>
+            <span class="n">header_dtype</span> <span class="o">=</span> <span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+            <span class="n">dtype_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">header_dtype</span><span class="p">)</span>
+
+            <span class="n">next_byte_position</span> <span class="o">=</span> <span class="n">headers</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">start_byte</span> \
+                                 <span class="k">if</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span> \
+                                 <span class="k">else</span> <span class="n">TraceHeaderSpec</span><span class="o">.</span><span class="n">TRACE_HEADER_SIZE</span> <span class="o">+</span> <span class="mi">1</span>
+
+            <span class="n">unused_len</span> <span class="o">=</span> <span class="n">next_byte_position</span> <span class="o">-</span> <span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">start_byte</span> <span class="o">+</span> <span class="n">header</span><span class="o">.</span><span class="n">byte_len</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">unused_len</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">unused_header</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s1">&#39;unused_</span><span class="si">{</span><span class="n">unused_counter</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">void</span><span class="p">,</span> <span class="n">unused_len</span><span class="p">)</span>
+                <span class="n">dtype_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unused_header</span><span class="p">)</span>
+                <span class="n">unused_counter</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="n">unused_len</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">header</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> header overlap&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dtype_list</span>
+
+
+    <span class="c1"># Traces loading</span>
+<div class="viewcode-block" id="MemmapLoader.load_traces">
+<a class="viewcode-back" href="../../api/segfast.memmap_loader.html#segfast.memmap_loader.MemmapLoader.load_traces">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_traces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load traces by their indices.</span>
+<span class="sd">        Under the hood, we use pre-made memory mapping over the file, where trace data is viewed with a special dtype.</span>
+<span class="sd">        Regardless of the numerical dtype of SEG-Y file, we output IEEE float32:</span>
+<span class="sd">        for IBM floats, that requires an additional conversion.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : sequence</span>
+<span class="sd">            Indices (``&#39;TRACE_SEQUENCE_FILE&#39;``) of the traces to read.</span>
+<span class="sd">        limits : sequence of ints, slice, optional</span>
+<span class="sd">            Slice of the data along the depth axis.</span>
+<span class="sd">        buffer : numpy.ndarray, optional</span>
+<span class="sd">            Buffer to read the data into. If possible, avoids copies.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_format</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_mmap</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">limits</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_mmap</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">start</span><span class="p">:</span><span class="n">limits</span><span class="o">.</span><span class="n">stop</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">step</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">traces</span> <span class="o">=</span> <span class="n">traces</span><span class="p">[:,</span> <span class="p">::</span><span class="n">limits</span><span class="o">.</span><span class="n">step</span><span class="p">]</span>
+            <span class="n">traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ibm_to_ieee</span><span class="p">(</span><span class="n">traces</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">require</span><span class="p">(</span><span class="n">traces</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">requirements</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
+
+        <span class="n">buffer</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)]</span> <span class="o">=</span> <span class="n">traces</span>
+        <span class="k">return</span> <span class="n">buffer</span></div>
+
+
+<div class="viewcode-block" id="MemmapLoader.load_depth_slices">
+<a class="viewcode-back" href="../../api/segfast.memmap_loader.html#segfast.memmap_loader.MemmapLoader.load_depth_slices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_depth_slices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load horizontal (depth) slices of the data.</span>
+<span class="sd">        Requires an almost full sweep through SEG-Y, therefore is slow.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : sequence</span>
+<span class="sd">            Indices (ordinals) of the depth slices to read.</span>
+<span class="sd">        buffer : numpy.ndarray, optional</span>
+<span class="sd">            Buffer to read the data into. If possible, avoids copies.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">depth_slices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_mmap</span><span class="p">[:,</span> <span class="n">indices</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_format</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">depth_slices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ibm_to_ieee</span><span class="p">(</span><span class="n">depth_slices</span><span class="p">)</span>
+        <span class="n">depth_slices</span> <span class="o">=</span> <span class="n">depth_slices</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">require</span><span class="p">(</span><span class="n">depth_slices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">requirements</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
+        <span class="n">buffer</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">depth_slices</span>
+        <span class="k">return</span> <span class="n">buffer</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ibm_to_ieee</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Convert IBM floats to regular IEEE ones. &quot;&quot;&quot;</span>
+        <span class="n">array_bytes</span> <span class="o">=</span> <span class="p">(</span><span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">3</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">endian</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;little&quot;</span><span class="p">,</span> <span class="s2">&quot;lsb&quot;</span><span class="p">}:</span>
+            <span class="n">array_bytes</span> <span class="o">=</span> <span class="n">array_bytes</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">ibm_to_ieee</span><span class="p">(</span><span class="o">*</span><span class="n">array_bytes</span><span class="p">)</span>
+
+
+    <span class="c1"># Inner workings</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Create pickling state from `__dict__` by setting SEG-Y file handler and memmap to `None`. &quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;data_mmap&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Recreate instance from the unpickled state, reopen source SEG-Y file and memmap. &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_mmap</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_construct_data_mmap</span><span class="p">()</span>
+
+
+    <span class="c1"># Conversion to other SEG-Y formats (data dtype)</span>
+<div class="viewcode-block" id="MemmapLoader.convert">
+<a class="viewcode-back" href="../../api/segfast.memmap_loader.html#segfast.memmap_loader.MemmapLoader.convert">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">convert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">25_000</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                <span class="n">pbar</span><span class="o">=</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Convert SEG-Y file to a different ``format``: dtype of data values.</span>
+<span class="sd">        Keeps the same binary header (except for the 3225 byte, which stores the format).</span>
+<span class="sd">        Keeps the same header values for each trace: essentially, only the values of each trace are transformed.</span>
+
+<span class="sd">        The most common scenario of this function usage is to convert float32 SEG-Y into int8 one:</span>
+<span class="sd">        the latter is a lot faster and takes ~4 times less disk space at the cost of some data loss.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path : str, optional</span>
+<span class="sd">            Path to the save file to. If not provided, we use the path of the current cube with an added postfix.</span>
+<span class="sd">        format : int</span>
+<span class="sd">            Target SEG-Y format.</span>
+<span class="sd">            Refer to :attr:`.SEGY_FORMAT_TO_TRACE_DATA_DTYPE` for list of available formats and their data value dtype.</span>
+<span class="sd">        transform : callable, optional</span>
+<span class="sd">            Callable to transform data from the current file to the ones, saved in ``path``.</span>
+<span class="sd">            Must return the same dtype, as specified by ``format``.</span>
+<span class="sd">        chunk_size : int</span>
+<span class="sd">            Maximum amount of traces in each chunk.</span>
+<span class="sd">        max_workers : int or None</span>
+<span class="sd">            Maximum number of parallel processes to spawn. If None, then the number of CPU cores is used.</span>
+<span class="sd">        pbar : bool, str</span>
+<span class="sd">            If bool, then whether to display a progress bar.</span>
+<span class="sd">            If str, then the type of progress bar to display: ``&#39;t&#39;`` for textual, ``&#39;n&#39;`` for widget.</span>
+<span class="sd">        overwrite : bool</span>
+<span class="sd">            Whether to overwrite the existing ``path`` or raise an exception.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        path : str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1">#pylint: disable=redefined-builtin</span>
+        <span class="c1"># Default path</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dirname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">basename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span> <span class="n">basename</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;_f</span><span class="si">{</span><span class="nb">format</span><span class="si">}</span><span class="s1">.&#39;</span><span class="p">))</span>
+
+        <span class="c1"># Compute target dtype, itemsize, size of the dst file</span>
+        <span class="n">dst_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">endian_symbol</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">SEGY_FORMAT_TO_TRACE_DATA_DTYPE</span><span class="p">[</span><span class="nb">format</span><span class="p">]</span>
+        <span class="n">dst_itemsize</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="n">dst_dtype</span><span class="p">)</span><span class="o">.</span><span class="n">itemsize</span>
+        <span class="n">dst_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span> <span class="o">+</span> \
+                   <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span> <span class="o">*</span> <span class="p">(</span><span class="n">TraceHeaderSpec</span><span class="o">.</span><span class="n">TRACE_HEADER_SIZE</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span> <span class="o">*</span> <span class="n">dst_itemsize</span><span class="p">)</span>
+
+        <span class="c1"># Exceptions</span>
+        <span class="n">traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_traces</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">transform</span><span class="p">(</span><span class="n">traces</span><span class="p">)</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">dst_dtype</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;dtype of `dst` is not the same as the one returned by `transform`!.&#39;</span>
+                             <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">dst_dtype</span><span class="si">}</span><span class="s1">!=</span><span class="si">{</span><span class="n">transform</span><span class="p">(</span><span class="n">traces</span><span class="p">)</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">OSError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;File </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s1"> already exists! Set `overwrite=True` to ignore this error.&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Serialize `transform`</span>
+        <span class="n">transform</span> <span class="o">=</span> <span class="n">dill</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+
+        <span class="c1"># Create new file and copy binary header</span>
+        <span class="n">src_mmap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="n">dst_mmap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;w+&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">dst_size</span><span class="p">,))</span>
+        <span class="n">dst_mmap</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span><span class="p">]</span> <span class="o">=</span> <span class="n">src_mmap</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span><span class="p">]</span>
+
+        <span class="c1"># Replace `format` bytes</span>
+        <span class="n">dst_mmap</span><span class="p">[</span><span class="mi">3225</span><span class="o">-</span><span class="mi">1</span><span class="p">:</span><span class="mi">3225</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">format</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">endian_symbol</span> <span class="o">+</span> <span class="s1">&#39;u2&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="s1">&#39;u1&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Prepare dst dtype</span>
+        <span class="n">dst_trace_dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">([(</span><span class="s1">&#39;headers&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">void</span><span class="p">,</span> <span class="n">TraceHeaderSpec</span><span class="o">.</span><span class="n">TRACE_HEADER_SIZE</span><span class="p">),</span>
+                                    <span class="p">(</span><span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="n">dst_dtype</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">)])</span>
+
+        <span class="c1"># Split the whole file into chunks no larger than `chunk_size`</span>
+        <span class="n">n_chunks</span><span class="p">,</span> <span class="n">last_chunk_size</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="n">chunk_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">chunk_size</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_chunks</span>
+        <span class="k">if</span> <span class="n">last_chunk_size</span><span class="p">:</span>
+            <span class="n">chunk_sizes</span> <span class="o">+=</span> <span class="p">[</span><span class="n">last_chunk_size</span><span class="p">]</span>
+        <span class="n">chunk_starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">chunk_sizes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Process `max_workers` and select executor</span>
+        <span class="n">max_workers</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="k">if</span> <span class="n">max_workers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">max_workers</span>
+        <span class="n">max_workers</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunk_sizes</span><span class="p">),</span> <span class="n">max_workers</span><span class="p">)</span>
+        <span class="n">executor_class</span> <span class="o">=</span> <span class="n">ForPoolExecutor</span> <span class="k">if</span> <span class="n">max_workers</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">ProcessPoolExecutor</span>
+
+        <span class="c1"># Iterate over chunks</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">Notifier</span><span class="p">(</span><span class="n">pbar</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Convert to `</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">`&#39;</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">110</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress_bar</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">executor_class</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="n">future</span><span class="p">):</span>
+                    <span class="n">chunk_size</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+                    <span class="n">progress_bar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk_size</span><span class="p">)</span>
+
+                <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">chunk_size_</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">chunk_starts</span><span class="p">,</span> <span class="n">chunk_sizes</span><span class="p">):</span>
+                    <span class="n">future</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">convert_chunk</span><span class="p">,</span>
+                                             <span class="n">src_path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">dst_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
+                                             <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">file_traces_offset</span><span class="p">,</span>
+                                             <span class="n">src_dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mmap_trace_dtype</span><span class="p">,</span> <span class="n">dst_dtype</span><span class="o">=</span><span class="n">dst_trace_dtype</span><span class="p">,</span>
+                                             <span class="n">endian</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">endian</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">transform</span><span class="p">,</span>
+                                             <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size_</span><span class="p">)</span>
+                    <span class="n">future</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">callback</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">read_chunk</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">mmap_dtype</span><span class="p">,</span> <span class="n">buffer_dtype</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Read headers from one chunk.</span>
+<span class="sd">    We create memory mapping anew in each worker, as it is easier and creates no significant overhead.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mmap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">mmap_dtype</span><span class="p">)</span>
+    <span class="n">headers_chunk</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">[[</span><span class="n">header</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">]][</span><span class="n">indices</span><span class="p">]</span>
+
+    <span class="c1"># Explicitly cast trace headers from mmap dtype to the target architecture dtype</span>
+    <span class="n">buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">headers_chunk</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">buffer_dtype</span><span class="p">)</span>
+    <span class="n">buffer</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">headers_chunk</span>
+    <span class="k">return</span> <span class="n">buffer</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">convert_chunk</span><span class="p">(</span><span class="n">src_path</span><span class="p">,</span> <span class="n">dst_path</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">src_dtype</span><span class="p">,</span> <span class="n">dst_dtype</span><span class="p">,</span> <span class="n">endian</span><span class="p">,</span> <span class="n">transform</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Copy the headers, transform, and write data from one chunk.</span>
+<span class="sd">    We create all memory mappings anew in each worker, as it is easier and creates no significant overhead.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Deserialize `transform`</span>
+    <span class="n">transform</span> <span class="o">=</span> <span class="n">dill</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+
+    <span class="c1"># Create mmaps: src is read-only, dst is read-write</span>
+    <span class="n">src_mmap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">src_path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">src_dtype</span><span class="p">)</span>
+    <span class="n">dst_mmap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">dst_path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r+&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dst_dtype</span><span class="p">)</span>
+
+    <span class="c1"># Load all data from chunk</span>
+    <span class="n">src_traces</span> <span class="o">=</span> <span class="n">src_mmap</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">]</span>
+    <span class="n">dst_traces</span> <span class="o">=</span> <span class="n">dst_mmap</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">]</span>
+
+    <span class="c1"># If `src_traces_data` is in IBM float, convert to float32</span>
+    <span class="n">src_traces_data</span> <span class="o">=</span> <span class="n">src_traces</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">src_traces_data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">array_bytes</span> <span class="o">=</span> <span class="p">(</span><span class="n">src_traces_data</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">],</span><span class="n">src_traces_data</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">],</span>
+                       <span class="n">src_traces_data</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">src_traces_data</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">3</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">endian</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;little&quot;</span><span class="p">,</span> <span class="s2">&quot;lsb&quot;</span><span class="p">}:</span>
+            <span class="n">array_bytes</span> <span class="o">=</span> <span class="n">array_bytes</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">src_traces_data</span> <span class="o">=</span> <span class="n">ibm_to_ieee</span><span class="p">(</span><span class="o">*</span><span class="n">array_bytes</span><span class="p">)</span>
+
+    <span class="c1"># Copy headers, write transformed data</span>
+    <span class="n">dst_traces</span><span class="p">[</span><span class="s1">&#39;headers&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">src_traces</span><span class="p">[</span><span class="s1">&#39;headers&#39;</span><span class="p">]</span>
+    <span class="n">dst_traces</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">src_traces_data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">chunk_size</span>
+
+
+<span class="nd">@njit</span><span class="p">(</span><span class="n">nogil</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">ibm_to_ieee</span><span class="p">(</span><span class="n">hh</span><span class="p">,</span> <span class="n">hl</span><span class="p">,</span> <span class="n">lh</span><span class="p">,</span> <span class="n">ll</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Convert 4 arrays representing individual bytes of IBM 4-byte floats into a single array of floats.</span>
+<span class="sd">    Input arrays are ordered from most to least significant bytes and have ``numpy.uint8`` dtypes.</span>
+<span class="sd">    The result is returned as an ``numpy.float32`` array.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># pylint: disable=not-an-iterable</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">hh</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">prange</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">prange</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">mant</span> <span class="o">=</span> <span class="p">(((</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">(</span><span class="n">hl</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">])</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">)</span> <span class="o">|</span> <span class="n">lh</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">])</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">)</span> <span class="o">|</span> <span class="n">ll</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">hh</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x80</span><span class="p">:</span>
+                <span class="n">mant</span> <span class="o">=</span> <span class="o">-</span><span class="n">mant</span>
+            <span class="n">exp16</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">(</span><span class="n">hh</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">])</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">(</span><span class="mh">0x7f</span><span class="p">))</span> <span class="o">-</span> <span class="mi">70</span>
+            <span class="n">res</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">mant</span> <span class="o">*</span> <span class="mf">16.0</span><span class="o">**</span><span class="n">exp16</span>
+    <span class="k">return</span> <span class="n">res</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Analysis Center.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

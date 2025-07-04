@@ -1,0 +1,536 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>segfast.segyio_loader &mdash; SegFast</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            segfast
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../start.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../segy.html">SEG-Y description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/segfast.html">API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">segfast</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">segfast.segyio_loader</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for segfast.segyio_loader</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot; A thin wrapper around `segyio` for convenient loading of seismic traces. &quot;&quot;&quot;</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">segyio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.trace_header_spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">TraceHeaderSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Notifier</span>
+
+
+
+<div class="viewcode-block" id="SegyioLoader">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SegyioLoader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; A thin wrapper around **segyio** library for convenient loading of headers and traces.</span>
+
+<span class="sd">    Most of the methods directly call the public API of **segyio**.</span>
+
+<span class="sd">    For trace loading, we use private methods and attributes of :class:`segyio.SegyFile`, which allow:</span>
+
+<span class="sd">       * reading data into the pre-defined buffer</span>
+<span class="sd">       * read only parts of the trace</span>
+
+<span class="sd">    This gives up to 50% speed-up over public API for the scenario of loading sequence of traces,</span>
+<span class="sd">    and up to 15% over public API in case of loading full lines (inlines or crosslines).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">SEGY_FORMAT_TO_TRACE_DATA_DTYPE</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="mi">1</span><span class="p">:</span>  <span class="s2">&quot;u1&quot;</span><span class="p">,</span>  <span class="c1"># IBM 4-byte float: has to be manually transformed to an IEEE float32</span>
+        <span class="mi">2</span><span class="p">:</span>  <span class="s2">&quot;i4&quot;</span><span class="p">,</span>
+        <span class="mi">3</span><span class="p">:</span>  <span class="s2">&quot;i2&quot;</span><span class="p">,</span>
+        <span class="mi">5</span><span class="p">:</span>  <span class="s2">&quot;f4&quot;</span><span class="p">,</span>
+        <span class="mi">6</span><span class="p">:</span>  <span class="s2">&quot;f8&quot;</span><span class="p">,</span>
+        <span class="mi">8</span><span class="p">:</span>  <span class="s2">&quot;i1&quot;</span><span class="p">,</span>
+        <span class="mi">9</span><span class="p">:</span>  <span class="s2">&quot;i8&quot;</span><span class="p">,</span>
+        <span class="mi">10</span><span class="p">:</span> <span class="s2">&quot;u4&quot;</span><span class="p">,</span>
+        <span class="mi">11</span><span class="p">:</span> <span class="s2">&quot;u2&quot;</span><span class="p">,</span>
+        <span class="mi">12</span><span class="p">:</span> <span class="s2">&quot;u8&quot;</span><span class="p">,</span>
+        <span class="mi">16</span><span class="p">:</span> <span class="s2">&quot;u1&quot;</span><span class="p">,</span>
+    <span class="p">}</span> <span class="c1">#: :meta private:</span>
+
+    <span class="n">ENDIANNESS_TO_SYMBOL</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;big&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;msb&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">,</span>
+
+        <span class="s2">&quot;little&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;lsb&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&quot;</span><span class="p">,</span>
+    <span class="p">}</span> <span class="c1">#: :meta private:</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">endian</span><span class="o">=</span><span class="s1">&#39;big&#39;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="c1"># Parse arguments for errors</span>
+        <span class="k">if</span> <span class="n">endian</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENDIANNESS_TO_SYMBOL</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unknown endian </span><span class="si">{</span><span class="n">endian</span><span class="si">}</span><span class="s1">, must be one of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ENDIANNESS_TO_SYMBOL</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Store arguments</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endian</span> <span class="o">=</span> <span class="n">endian</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strict</span> <span class="o">=</span> <span class="n">strict</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ignore_geometry</span> <span class="o">=</span> <span class="n">ignore_geometry</span>
+
+        <span class="c1"># Open SEG-Y file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span> <span class="o">=</span> <span class="n">segyio</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">endian</span><span class="o">=</span><span class="n">endian</span><span class="p">,</span>
+                                        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">ignore_geometry</span><span class="o">=</span><span class="n">ignore_geometry</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">mmap</span><span class="p">()</span>
+
+        <span class="c1"># Number of traces and depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">trace</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">trace</span><span class="o">.</span><span class="n">length</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">dtype</span>
+
+        <span class="c1"># Misc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">xfd</span><span class="o">.</span><span class="n">metrics</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">text</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">text</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">ext_headers</span><span class="p">)]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_interval</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Sample interval of seismic traces. &quot;&quot;&quot;</span>
+        <span class="n">bin_sample_interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">bin</span><span class="p">[</span><span class="n">segyio</span><span class="o">.</span><span class="n">BinField</span><span class="o">.</span><span class="n">Interval</span><span class="p">]</span>
+        <span class="n">trace_sample_interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">segyio</span><span class="o">.</span><span class="n">TraceField</span><span class="o">.</span><span class="n">TRACE_SAMPLE_INTERVAL</span><span class="p">]</span>
+        <span class="c1"># 0 means undefined sample interval, so it is removed from the set</span>
+        <span class="n">union_sample_interval</span> <span class="o">=</span> <span class="p">{</span><span class="n">bin_sample_interval</span><span class="p">,</span> <span class="n">trace_sample_interval</span><span class="p">}</span> <span class="o">-</span> <span class="p">{</span><span class="mi">0</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">union_sample_interval</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot infer sample interval from file headers: &quot;</span>
+                             <span class="s2">&quot;either both `Interval` (bytes 3217-3218 in the binary header) &quot;</span>
+                             <span class="s2">&quot;and `TRACE_SAMPLE_INTERVAL` (bytes 117-118 in the header of the first trace) &quot;</span>
+                             <span class="s2">&quot;are undefined or they have different values.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">union_sample_interval</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Delay recording time of seismic traces. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">segyio</span><span class="o">.</span><span class="n">TraceField</span><span class="o">.</span><span class="n">DelayRecordingTime</span><span class="p">)</span>
+
+
+    <span class="c1"># Headers</span>
+<div class="viewcode-block" id="SegyioLoader.load_headers">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_headers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sort_columns</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_specs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                     <span class="n">tracewise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load requested trace headers from a SEG-Y file for each trace into a dataframe.</span>
+<span class="sd">        If needed, we reconstruct the ``&#39;TRACE_SEQUENCE_FILE&#39;`` manually be re-indexing traces.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        headers : sequence</span>
+<span class="sd">            An array-like where each element can be:</span>
+<span class="sd">                - ``str`` -- header name,</span>
+<span class="sd">                - ``int`` -- header starting byte,</span>
+<span class="sd">                - :class:`~.trace_header_spec.TraceHeaderSpec` -- used as is,</span>
+<span class="sd">                - ``tuple`` -- args to init :class:`~.trace_header_spec.TraceHeaderSpec`,</span>
+<span class="sd">                - ``dict`` -- kwargs to init :class:`~.trace_header_spec.TraceHeaderSpec`.</span>
+
+<span class="sd">            Note that for :class:`.SegyioLoader` all nonstandard headers byte positions and dtypes will be ignored.</span>
+<span class="sd">        indices : sequence or None</span>
+<span class="sd">            Indices of traces to load trace headers for. If not given, trace headers are loaded for all traces.</span>
+<span class="sd">        reconstruct_tsf : bool</span>
+<span class="sd">            Whether to reconstruct ``TRACE_SEQUENCE_FILE`` manually.</span>
+<span class="sd">        sort_columns : bool</span>
+<span class="sd">            Whether to sort columns in the resulting dataframe by their starting bytes.</span>
+<span class="sd">        return_specs : bool</span>
+<span class="sd">            Whether to return header specs used to load trace headers.</span>
+<span class="sd">        tracewise : bool</span>
+<span class="sd">            Whether to iterate over the file in a trace-wise manner, instead of header-wise.</span>
+<span class="sd">        pbar : bool, str</span>
+<span class="sd">            If ``bool``, then whether to display the progress bar over the file sweep.</span>
+<span class="sd">            If ``str``, then type of progress bar to display: ``&#39;t&#39;`` for textual, ``&#39;n&#39;`` for widget.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        ``pandas.DataFrame``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">kwargs</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_headers_specs</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">has_standard_location</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;All nonstandard trace headers byte positions and dtypes will be ignored.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reconstruct_tsf</span><span class="p">:</span>
+            <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span> <span class="k">if</span> <span class="n">header</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s1">&#39;TRACE_SEQUENCE_FILE&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Load data to buffer</span>
+        <span class="n">n_traces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span> <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n_traces</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">headers</span><span class="p">)),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">tracewise</span><span class="p">:</span>
+            <span class="n">indices_iter</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_traces</span><span class="p">)</span> <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">indices</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">trace_ix</span> <span class="ow">in</span> <span class="n">Notifier</span><span class="p">(</span><span class="n">pbar</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">1000</span><span class="p">)(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">indices_iter</span><span class="p">)):</span>
+                <span class="n">trace_headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">trace_ix</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">header</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span>
+                    <span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">trace_headers</span><span class="o">.</span><span class="n">getfield</span><span class="p">(</span><span class="n">trace_headers</span><span class="o">.</span><span class="n">buf</span><span class="p">,</span> <span class="n">header</span><span class="o">.</span><span class="n">start_byte</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">indexer</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">indices</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">header</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span>
+                <span class="n">buffer</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">attributes</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">start_byte</span><span class="p">)[</span><span class="n">indexer</span><span class="p">]</span>
+
+        <span class="c1"># Convert to pd.DataFrame, optionally add TSF and sort</span>
+        <span class="n">dataframe</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">],</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocess_headers_dataframe</span><span class="p">(</span><span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">,</span>
+                                                                <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="n">reconstruct_tsf</span><span class="p">,</span>
+                                                                <span class="n">sort_columns</span><span class="o">=</span><span class="n">sort_columns</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_specs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span>
+        <span class="k">return</span> <span class="n">dataframe</span></div>
+
+
+<div class="viewcode-block" id="SegyioLoader.load_header">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_header">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_header</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load exactly one header. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_headers</span><span class="p">([</span><span class="n">header</span><span class="p">],</span> <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">,</span> <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sort_columns</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">postprocess_headers_dataframe</span><span class="p">(</span><span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reconstruct_tsf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sort_columns</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Optionally add ``&#39;TRACE_SEQUENCE_FILE&#39;`` header and sort columns of a headers dataframe. </span>
+
+<span class="sd">        :meta private:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">reconstruct_tsf</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataframe</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">iinfo</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">max</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+                <span class="n">tsf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataframe</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tsf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">dataframe</span><span class="p">[</span><span class="s1">&#39;TRACE_SEQUENCE_FILE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tsf</span>
+            <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="o">+</span> <span class="p">[</span><span class="n">TraceHeaderSpec</span><span class="p">(</span><span class="s1">&#39;TRACE_SEQUENCE_FILE&#39;</span><span class="p">)]</span>
+
+        <span class="k">if</span> <span class="n">sort_columns</span><span class="p">:</span>
+            <span class="n">headers_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">([</span><span class="n">item</span><span class="o">.</span><span class="n">start_byte</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">])</span>
+            <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="n">headers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">headers_indices</span><span class="p">]</span>
+            <span class="n">dataframe</span> <span class="o">=</span> <span class="n">dataframe</span><span class="p">[[</span><span class="n">header</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">]]</span>
+        <span class="k">return</span> <span class="n">dataframe</span><span class="p">,</span> <span class="n">headers</span>
+
+<div class="viewcode-block" id="SegyioLoader.make_headers_specs">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.make_headers_specs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_headers_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Transform headers list to list of :class:`~.trace_header_spec.TraceHeaderSpec` instances. &quot;&quot;&quot;</span>
+        <span class="n">byteorder</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENDIANNESS_TO_SYMBOL</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">endian</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">headers</span> <span class="o">==</span> <span class="s1">&#39;all&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">TraceHeaderSpec</span><span class="p">(</span><span class="n">start_byte</span><span class="o">=</span><span class="n">start_byte</span><span class="p">,</span> <span class="n">byteorder</span><span class="o">=</span><span class="n">byteorder</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">start_byte</span> <span class="ow">in</span> <span class="n">TraceHeaderSpec</span><span class="o">.</span><span class="n">STANDARD_BYTE_TO_HEADER</span><span class="p">]</span>
+
+        <span class="n">headers_</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">TraceHeaderSpec</span><span class="p">):</span>
+                <span class="n">headers_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">set_default_byteorder</span><span class="p">(</span><span class="n">byteorder</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                    <span class="n">header</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">header</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">header</span> <span class="o">=</span> <span class="p">(</span><span class="n">header</span><span class="p">,)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                    <span class="n">init_kwargs</span> <span class="o">=</span> <span class="n">header</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">init_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">([</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="s1">&#39;start_byte&#39;</span><span class="p">,</span> <span class="s1">&#39;dtype&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">))</span>
+                <span class="n">init_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;byteorder&#39;</span><span class="p">:</span> <span class="n">byteorder</span><span class="p">,</span> <span class="o">**</span><span class="n">init_kwargs</span><span class="p">}</span>
+                <span class="n">headers_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">TraceHeaderSpec</span><span class="p">(</span><span class="o">**</span><span class="n">init_kwargs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">headers_</span></div>
+
+
+
+    <span class="c1"># Data loading: traces</span>
+<div class="viewcode-block" id="SegyioLoader.load_traces">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_traces">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_traces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load traces by their indices.</span>
+<span class="sd">        By pre-allocating memory for all of the requested traces, we significantly speed up the process.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : sequence</span>
+<span class="sd">            Indices (``TRACE_SEQUENCE_FILE``) of the traces to read.</span>
+<span class="sd">        limits : sequence of ints, slice, optional</span>
+<span class="sd">            Slice of the data along the depth axis.</span>
+<span class="sd">        buffer : numpy.ndarray, optional</span>
+<span class="sd">            Buffer to read the data into. If possible, avoids copies.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="o">*</span><span class="n">limits</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">)))</span>
+
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">),</span> <span class="n">n_samples</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">load_trace</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buffer</span></div>
+
+
+<div class="viewcode-block" id="SegyioLoader.process_limits">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.process_limits">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_limits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limits</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Convert given ``limits`` to a ``slice`` instance. &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">limits</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="n">limits</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">limits</span><span class="p">)</span>
+
+        <span class="c1"># Use .indices to avoid negative slicing range</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_samples</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Negative step is not allowed.&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">indices</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Empty traces after setting limits.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SegyioLoader.load_trace">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_trace">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_trace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">limits</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load one trace into the buffer. &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">xfd</span><span class="o">.</span><span class="n">gettr</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span>
+                                    <span class="n">limits</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">step</span><span class="p">,</span>
+                                    <span class="n">buffer</span><span class="o">.</span><span class="n">size</span><span class="p">)</span></div>
+
+
+
+    <span class="c1"># Data loading: depth slices</span>
+<div class="viewcode-block" id="SegyioLoader.load_depth_slices">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_depth_slices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_depth_slices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load horizontal (depth) slices of the data.</span>
+<span class="sd">        Requires an almost full sweep through SEG-Y, therefore is slow.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : sequence</span>
+<span class="sd">            Indices (ordinals) of the depth slices to read.</span>
+<span class="sd">        buffer : numpy.ndarray, optional</span>
+<span class="sd">            Buffer to read the data into. If possible, avoids copies.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">load_depth_slice</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="n">buffer</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">buffer</span></div>
+
+
+<div class="viewcode-block" id="SegyioLoader.load_depth_slice">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.load_depth_slice">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_depth_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load one depth slice into buffer. &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">xfd</span><span class="o">.</span><span class="n">getdepth</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span></div>
+
+
+
+    <span class="c1"># Convenience and utility methods</span>
+<div class="viewcode-block" id="SegyioLoader.make_chunk_iterator">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.make_chunk_iterator">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_chunk_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Create an iterator over the entire file traces in chunks.</span>
+
+<span class="sd">        Each chunk contains no more than ``chunk_size`` traces.</span>
+<span class="sd">        If ``chunk_size`` is not provided and ``n_chunks`` is given instead, there are no more than ``n_chunks`` chunks.</span>
+<span class="sd">        One and only one of ``chunk_size`` and ``n_chunks`` should be provided.</span>
+
+<span class="sd">        Each element in the iterator is a dictionary with ``&#39;data&#39;``, ``&#39;start&#39;`` and ``&#39;end&#39;`` keys.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        chunk_size : int, optional</span>
+<span class="sd">            Maximum size of the chunk.</span>
+<span class="sd">        n_chunks : int, optional</span>
+<span class="sd">            Maximum number of chunks.</span>
+<span class="sd">        limits : sequence of ints, slice, optional</span>
+<span class="sd">            Slice of the data along the depth (last) axis. Passed directly to :meth:`.load_traces`.</span>
+<span class="sd">        buffer : numpy.ndarray, optional</span>
+<span class="sd">            Buffer to read the data into. If possible, avoids copies. Passed directly to :meth:`.load_traces`.</span>
+
+<span class="sd">        Return</span>
+<span class="sd">        ------</span>
+<span class="sd">        iterator, info : tuple with two elements</span>
+
+<span class="sd">        iterator : iterable</span>
+<span class="sd">            An iterator over the entire SEG-Y traces.</span>
+<span class="sd">            Each element in the iterator is a dictionary with ``&#39;data&#39;``, ``&#39;start&#39;`` and ``&#39;end&#39;`` keys.</span>
+<span class="sd">        info : dict</span>
+<span class="sd">            Description of the iterator with ``&#39;chunk_size&#39;``, ``&#39;n_chunks&#39;``, ``&#39;chunk_starts&#39;`` and ``&#39;chunk_ends&#39;``</span>
+<span class="sd">            keys.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Parse input parameters</span>
+        <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">n_chunks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Either `chunk_size` or `n_chunks` should be provided!&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">n_chunks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Only one of `chunk_size` and `n_chunks` should be provided!&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_chunks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span> <span class="o">//</span> <span class="n">n_chunks</span>
+
+        <span class="c1"># Define start and end for each chunk</span>
+        <span class="n">n_chunks</span><span class="p">,</span> <span class="n">last_chunk_size</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_traces</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="n">chunk_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">chunk_size</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_chunks</span>
+        <span class="k">if</span> <span class="n">last_chunk_size</span><span class="p">:</span>
+            <span class="n">n_chunks</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">chunk_sizes</span> <span class="o">+=</span> <span class="p">[</span><span class="n">last_chunk_size</span><span class="p">]</span>
+
+        <span class="n">chunk_starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">chunk_sizes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">chunk_ends</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">chunk_sizes</span><span class="p">)</span>
+
+        <span class="c1"># Prepare iterator</span>
+        <span class="n">iterator</span> <span class="o">=</span> <span class="p">({</span><span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_traces</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)),</span> <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="n">buffer</span><span class="p">),</span>
+                     <span class="s1">&#39;start&#39;</span><span class="p">:</span> <span class="n">start</span><span class="p">,</span> <span class="s1">&#39;end&#39;</span><span class="p">:</span> <span class="n">end</span><span class="p">}</span> <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">chunk_starts</span><span class="p">,</span> <span class="n">chunk_ends</span><span class="p">))</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;chunk_size&#39;</span><span class="p">:</span> <span class="n">chunk_size</span><span class="p">,</span>
+            <span class="s1">&#39;n_chunks&#39;</span><span class="p">:</span> <span class="n">n_chunks</span><span class="p">,</span>
+            <span class="s1">&#39;chunk_starts&#39;</span><span class="p">:</span> <span class="n">chunk_starts</span><span class="p">,</span>
+            <span class="s1">&#39;chunk_ends&#39;</span><span class="p">:</span> <span class="n">chunk_ends</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">iterator</span><span class="p">,</span> <span class="n">info</span></div>
+
+
+<div class="viewcode-block" id="SegyioLoader.chunk_iterator">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SegyioLoader.chunk_iterator">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">chunk_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; A shorthand for :meth:`.make_chunk_iterator` with no info returned. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_chunk_iterator</span><span class="p">(</span><span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span> <span class="n">n_chunks</span><span class="o">=</span><span class="n">n_chunks</span><span class="p">,</span>
+                                        <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="n">buffer</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+    <span class="c1"># Inner workings</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">__</span><span class="p">,</span> <span class="n">___</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Create a pickling state from ``__dict__`` by setting SEG-Y file handler to ``None``. &quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;file_handler&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Recreate instance from unpickled state and reopen source SEG-Y file. &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span> <span class="o">=</span> <span class="n">segyio</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">endian</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">endian</span><span class="p">,</span>
+                                        <span class="n">strict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">strict</span><span class="p">,</span> <span class="n">ignore_geometry</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_geometry</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">mmap</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="SafeSegyioLoader">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SafeSegyioLoader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SafeSegyioLoader</span><span class="p">(</span><span class="n">SegyioLoader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; A thin wrapper around **segyio** library for convenient loading of headers and traces.</span>
+
+<span class="sd">    Unlike :class:`.SegyioLoader`, uses only public APIs to load traces.</span>
+
+<span class="sd">    Used mainly for performance measurements.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SafeSegyioLoader.load_trace">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SafeSegyioLoader.load_trace">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_trace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">limits</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load one trace into buffer. &quot;&quot;&quot;</span>
+        <span class="n">buffer</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">trace</span><span class="o">.</span><span class="n">raw</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="n">limits</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SafeSegyioLoader.load_depth_slice">
+<a class="viewcode-back" href="../../api/segfast.segyio_loader.html#segfast.segyio_loader.SafeSegyioLoader.load_depth_slice">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_depth_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">buffer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Load one depth slice into buffer. &quot;&quot;&quot;</span>
+        <span class="n">buffer</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_handler</span><span class="o">.</span><span class="n">depth_slice</span><span class="p">[</span><span class="n">index</span><span class="p">]</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Analysis Center.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
